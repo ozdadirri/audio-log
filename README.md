@@ -9,6 +9,30 @@ Pipeline: **watched input dir → mlx-whisper (transcribe) → Ollama (summarize
 
 Everything runs locally — no cloud services.
 
+![Library — a Google Photos-style grid of color-coded spectrogram thumbnails](images/demo1.png)
+
+![Preview — audio player, structured summary, transcript, and Chinese translation toggle](images/demo2.png)
+
+## Key features
+
+- 🎨 **Color-coded spectrogram thumbnails** — every recording becomes a square
+  "photo" of its own sound. The texture is the audio (speech, pauses, music);
+  the color encodes the day it was added — same day, same hue; different days
+  land far apart on the color wheel — so you can tell sessions apart at a glance.
+- 🖼️ **Google Photos-ish library** — recordings grouped by day in a tile grid,
+  hover for details, click for a full preview, multi-select tiles to delete in
+  one go, drag-and-drop anywhere to upload.
+- 🎙️ **Transcription** — mlx-whisper (Apple Silicon) produces timestamped
+  transcripts that highlight and auto-scroll in sync with playback; click any
+  line to jump the audio there.
+- 📝 **Summaries** — every recording is digested by a local Ollama model into
+  TL;DR, key points, decisions, action items, and open questions.
+- 🌐 **EN ⇄ 中文 translation** — one click on the summary tab translates the
+  digest to Simplified Chinese (generated once, cached forever).
+- 🔍 **Search + Ask AI** — full-text search across all transcripts as you
+  type; press Enter to ask a question and get a grounded answer with cited,
+  clickable sources.
+
 ## Requirements
 
 - Apple Silicon Mac (mlx-whisper)
