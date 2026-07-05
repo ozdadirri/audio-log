@@ -42,6 +42,11 @@ Everything runs locally — no cloud services.
 ## Run
 
 ```bash
+# first time: create the venv and install dependencies
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+# start the service
 .venv/bin/uvicorn app.main:app --port 8300 --reload
 ```
 
