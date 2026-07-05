@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>mic test</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 40px auto; line-height: 1.6; }
+  button { font-size: 15px; padding: 10px 18px; margin-right: 8px; cursor: pointer; }
+  pre { background: #f4f4f4; padding: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h2>Minimal microphone test</h2>
+<p>Each test records 5 seconds. Nothing is uploaded.</p>
+<button id="t1">Test 1: recorder only</button>
+<button id="t2">Test 2: recorder + timeslice</button>
+<button id="t3">Test 3: recorder + level meter (⚠ breaks later captures until browser restart)</button>
+<button id="t4">Test 4: play a tone</button>
+<pre id="log"></pre>
+<script>
+const log = (m) => document.getElementById("log").textContent += m + "\n";
+log("browser: " + navigator.userAgent);
+
+async function run(name, { timeslice, meter }) {
+  log(`\n── ${name} ──`);
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { log("getUserMedia FAILED: " + e); return; }
+  const track = stream.getAudioTracks()[0];
+  log(`track: label="${track.label}" muted=${track.muted} state=${track.readyState}`);
+  const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+  log("mime: " + mime);
+
+  let actx, srcNode;
+  if (meter) {
+    actx = new AudioContext();
+    const analyser = actx.createAnalyser();
+    srcNode = actx.createMediaStreamSource(stream);
+    srcNode.connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+    const iv = setInterval(() => {
+      analyser.getFloatTimeDomainData(buf);
+      let s = 0; for (const v of buf) s += v * v;
+      log("  rms: " + Math.sqrt(s / buf.length).toFixed(4));
+    }, 1000);
+    setTimeout(() => clearInterval(iv), 5200);
+  }
+
+  const rec = new MediaRecorder(stream, { mimeType: mime });
+  const chunks = [];
+  rec.ondataavailable = (e) => { chunks.push(e.data); log(`  chunk: ${e.data.size} bytes`); };
+  rec.onerror = (e) => log("  recorder ERROR: " + (e.error || e));
+  rec.onstop = () => {
+    stream.getTracks().forEach(t => t.stop());
+    const total = chunks.reduce((n, c) => n + c.size, 0);
+    log(`RESULT: ${chunks.length} chunks, ${total} bytes total ` +
+        (total > 2048 ? "✅ AUDIO CAPTURED" : "❌ EMPTY"));
+    log(`track after: muted=${track.muted} state=${track.readyState}`);
+  };
+  timeslice ? rec.start(1000) : rec.start();
+  log("recording 5s… speak now");
+  setTimeout(() => rec.stop(), 5000);
+}
+
+// Playback test: a 2s 440Hz tone as a WAV blob played through an <audio>
+// element — no Web Audio, no server. Tests whether Chrome can output sound at all.
+document.getElementById("t4").onclick = () => {
+  log("\n── playback test ──");
+  const sr = 8000, n = sr * 2, data = new Int16Array(n);
+  for (let i = 0; i < n; i++) data[i] = Math.sin(i / sr * 440 * 2 * Math.PI) * 12000;
+  const hdr = new DataView(new ArrayBuffer(44));
+  const w = (o, s) => [...s].forEach((c, i) => hdr.setUint8(o + i, c.charCodeAt(0)));
+  w(0, "RIFF"); hdr.setUint32(4, 36 + n * 2, true); w(8, "WAVEfmt ");
+  hdr.setUint32(16, 16, true); hdr.setUint16(20, 1, true); hdr.setUint16(22, 1, true);
+  hdr.setUint32(24, sr, true); hdr.setUint32(28, sr * 2, true);
+  hdr.setUint16(32, 2, true); hdr.setUint16(34, 16, true);
+  w(36, "data"); hdr.setUint32(40, n * 2, true);
+  const a = new Audio(URL.createObjectURL(new Blob([hdr.buffer, data.buffer], { type: "audio/wav" })));
+  a.onplaying = () => log("playing… you should hear a 2s beep ✅ (if silent, output is wedged)");
+  a.onended = () => log("finished ✅");
+  a.onerror = () => log("playback ERROR ❌ code " + a.error?.code + " — Chrome audio output is wedged");
+  a.play().catch((e) => log("play() rejected ❌ " + e));
+};
+
+document.getElementById("t1").onclick = () => run("recorder only", {});
+document.getElementById("t2").onclick = () => run("recorder + timeslice", { timeslice: true });
+document.getElementById("t3").onclick = () => run("recorder + meter", { meter: true });
+</script>
+</body>
+</html>

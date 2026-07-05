@@ -1,0 +1,758 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>audio-log</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #3563E9;
+    --primary-dark: #264BC8;
+    --bg: #F6F7F9;
+    --card: #FFFFFF;
+    --text: #1A202C;
+    --text-2: #596780;
+    --text-3: #90A3BF;
+    --line: #E7EEF6;
+    --danger: #F53D3D;
+    --ok: #7FB519;
+    --warn: #FF9E0C;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: "Plus Jakarta Sans", -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; min-height: 100vh;
+  }
+
+  /* ── Sidebar ─────────────────────────────── */
+  aside {
+    width: 240px; flex-shrink: 0; background: var(--card);
+    border-right: 1px solid var(--line);
+    padding: 24px 16px; display: flex; flex-direction: column; gap: 28px;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .logo { color: var(--primary); font-size: 22px; font-weight: 700; letter-spacing: -0.5px; padding: 0 12px; }
+  .logo span { color: var(--text-3); font-weight: 500; }
+  nav .nav-label {
+    font-size: 11px; font-weight: 600; color: var(--text-3);
+    letter-spacing: 1.5px; text-transform: uppercase; padding: 0 12px; margin-bottom: 10px;
+  }
+  nav a {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: var(--radius);
+    color: var(--text-2); text-decoration: none; font-size: 14px; font-weight: 500;
+  }
+  nav a.active { background: var(--primary); color: #fff; }
+  nav a svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .side-config {
+    margin-top: auto; font-size: 11px; color: var(--text-3);
+    background: var(--bg); border-radius: var(--radius); padding: 12px;
+    line-height: 1.7; overflow-wrap: break-word;
+  }
+  .side-config b { color: var(--text-2); font-weight: 600; }
+
+  /* ── Main / topbar ───────────────────────── */
+  main { flex: 1; min-width: 0; }
+  header {
+    background: var(--card); border-bottom: 1px solid var(--line);
+    padding: 16px 32px; display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .search {
+    flex: 1; max-width: 420px; display: flex; align-items: center; gap: 10px;
+    border: 1px solid var(--line); border-radius: 999px; padding: 10px 18px;
+    color: var(--text-3);
+  }
+  .search input { border: 0; outline: 0; flex: 1; font: inherit; font-size: 14px; color: var(--text); background: none; }
+  .btn {
+    border: 0; border-radius: var(--radius); cursor: pointer;
+    font: inherit; font-size: 14px; font-weight: 600;
+    padding: 10px 20px; background: var(--primary); color: #fff;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn:hover { background: var(--primary-dark); }
+  .btn.ghost { background: var(--bg); color: var(--text-2); }
+  .btn.danger { color: var(--danger); }
+  .btn.danger:hover { background: var(--danger); color: #fff; }
+  .btn.danger-full { background: var(--danger); }
+  .btn.danger-full:hover { background: #c92a2a; }
+  .rec-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); }
+  .btn.recording { background: var(--danger); color: #fff; }
+  .btn.recording .rec-dot { background: #fff; animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  #uploadMsg { font-size: 13px; color: var(--text-3); margin-left: auto; }
+
+  /* ── Photos grid ─────────────────────────── */
+  .content { padding: 24px 32px 64px; }
+  .day { margin-bottom: 28px; }
+  .day h2 { font-size: 15px; font-weight: 600; color: var(--text); margin: 0 0 12px; }
+  .day h2 small { color: var(--text-3); font-weight: 500; margin-left: 8px; }
+  .grid {
+    display: grid; gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  }
+  .tile {
+    position: relative; aspect-ratio: 1; border-radius: var(--radius);
+    overflow: hidden; cursor: pointer; background: #10101c;
+    outline: 0;
+  }
+  .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tile .placeholder {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--text-3); font-size: 12px;
+    background: linear-gradient(110deg, #1a1a2e 40%, #26264a 50%, #1a1a2e 60%);
+    background-size: 200% 100%; animation: shimmer 1.6s linear infinite;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .tile .overlay {
+    position: absolute; inset: auto 0 0 0; padding: 24px 10px 8px;
+    background: linear-gradient(transparent, rgba(0,0,0,.75));
+    color: #fff; font-size: 12px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    opacity: 0; transition: opacity .15s;
+  }
+  .tile:hover .overlay, .tile:focus .overlay { opacity: 1; }
+  .tile .dur {
+    position: absolute; right: 8px; top: 8px;
+    background: rgba(0,0,0,.55); color: #fff; font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .tile .check {
+    position: absolute; left: 8px; top: 8px; z-index: 2;
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.45); border: 1.5px solid rgba(255,255,255,.85);
+    color: #fff; font-size: 13px; opacity: 0; transition: opacity .15s;
+  }
+  .tile:hover .check { opacity: 1; }
+  .tile.selected .check { opacity: 1; background: var(--primary); border-color: var(--primary); }
+  .tile.selected { outline: 3px solid var(--primary); outline-offset: -3px; }
+  .tile.selected img { transform: scale(.88); border-radius: 10px; transition: transform .15s; }
+  .badge {
+    position: absolute; left: 8px; bottom: 8px;
+    font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 999px; color: #fff;
+  }
+  .badge.pending, .badge.transcribing, .badge.summarizing { background: var(--warn); }
+  .badge.error { background: var(--danger); }
+  .empty { color: var(--text-3); font-size: 14px; padding: 48px 0; text-align: center; }
+
+  /* ── Lightbox ────────────────────────────── */
+  #lightbox {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    background: rgba(19, 19, 32, .8); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center; padding: 32px;
+  }
+  #lightbox.open { display: flex; }
+  .lb-card {
+    background: var(--card); border-radius: 16px; overflow: hidden;
+    width: min(1080px, 100%); max-height: 100%; display: flex;
+  }
+  .lb-left {
+    width: 42%; flex-shrink: 0; background: #10101c;
+    display: flex; flex-direction: column;
+  }
+  .lb-left img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+  .lb-left audio { width: 100%; margin-top: auto; padding: 12px; }
+  .lb-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .lb-head { padding: 20px 24px 0; }
+  .lb-head h3 { font-size: 17px; font-weight: 700; overflow-wrap: break-word; }
+  .lb-meta { font-size: 12px; color: var(--text-3); margin-top: 6px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .lb-actions { margin-top: 14px; display: flex; gap: 8px; align-items: center; }
+  .lb-actions .btn { padding: 7px 14px; font-size: 13px; }
+  .tabs { display: flex; gap: 4px; padding: 14px 24px 0; border-bottom: 1px solid var(--line); }
+  .tabs button {
+    border: 0; background: none; cursor: pointer; font: inherit;
+    font-size: 13px; font-weight: 600; color: var(--text-3);
+    padding: 8px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tabs button.active { color: var(--primary); border-color: var(--primary); }
+  #langToggle {
+    margin-left: auto; margin-bottom: 6px; border: 1px solid var(--line) !important;
+    border-radius: 999px; padding: 4px 14px; font-size: 12px;
+  }
+  #langToggle.zh { background: var(--primary); color: #fff; border-color: var(--primary) !important; }
+  .lb-body { overflow-y: auto; padding: 18px 24px 24px; flex: 1; }
+  .lb-body pre {
+    white-space: pre-wrap; font-family: inherit; font-size: 13.5px;
+    line-height: 1.75; color: var(--text-2);
+  }
+  .seg {
+    display: flex; gap: 12px; padding: 6px 10px; border-radius: 8px; cursor: pointer;
+  }
+  .seg:hover { background: var(--bg); }
+  .seg.active { background: rgba(53, 99, 233, .1); }
+  .seg .t {
+    flex-shrink: 0; min-width: 42px; padding-top: 3px;
+    font-size: 11px; font-weight: 700; color: var(--text-3);
+  }
+  .seg.active .t { color: var(--primary); }
+  .seg p { font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
+  .seg.active p { color: var(--text); }
+  .lb-close {
+    position: absolute; top: 20px; right: 24px; border: 0; cursor: pointer;
+    width: 38px; height: 38px; border-radius: 50%;
+    background: rgba(255,255,255,.12); color: #fff; font-size: 17px;
+  }
+  /* ── Ask AI panel ────────────────────────── */
+  .ask-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px 22px; margin-bottom: 24px;
+  }
+  .ask-card .q { font-size: 13px; font-weight: 700; color: var(--primary); margin-bottom: 10px; }
+  .ask-card .a { font-size: 14px; line-height: 1.75; color: var(--text-2); white-space: pre-wrap; }
+  .ask-card .thinking { color: var(--text-3); font-size: 13.5px; }
+  .ask-card .thinking::after {
+    content: ""; display: inline-block; width: 1em; text-align: left;
+    animation: dots 1.2s steps(4) infinite;
+  }
+  @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+  .ask-sources { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .ask-sources button {
+    border: 1px solid var(--line); background: var(--bg); cursor: pointer;
+    font: inherit; font-size: 12px; font-weight: 600; color: var(--text-2);
+    padding: 5px 12px; border-radius: 999px;
+  }
+  .ask-sources button:hover { border-color: var(--primary); color: var(--primary); }
+  .ask-close { float: right; border: 0; background: none; cursor: pointer; color: var(--text-3); font-size: 14px; }
+
+  #dropHint {
+    position: fixed; inset: 12px; z-index: 200; display: none;
+    border: 2px dashed var(--primary); border-radius: 16px;
+    background: rgba(53, 99, 233, .08);
+    align-items: center; justify-content: center;
+    color: var(--primary); font-size: 18px; font-weight: 600; pointer-events: none;
+  }
+  @media (max-width: 900px) {
+    aside { display: none; }
+    .lb-card { flex-direction: column; overflow-y: auto; }
+    .lb-left { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="logo">AUDIO<span>LOG</span></div>
+  <nav>
+    <div class="nav-label">Main Menu</div>
+    <a class="active" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      Library
+    </a>
+  </nav>
+  <div class="side-config" id="cfg"></div>
+</aside>
+
+<main>
+  <header>
+    <div class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="searchInput" type="search" placeholder="Search transcripts — press Enter to ask AI…">
+    </div>
+    <span id="uploadMsg"></span>
+    <button class="btn danger-full" id="bulkDelete" style="display:none">Delete</button>
+    <!-- Record button removed while the Chrome audio-service crash persists; to
+         re-enable, restore:
+         <button class="btn ghost" id="recordBtn">
+           <span class="rec-dot"></span><span id="recordLabel">Record</span>
+         </button> -->
+    <button class="btn" id="uploadBtn">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 16V4m0 0 5 5m-5-5-5 5"/><path d="M4 20h16"/></svg>
+      Upload audio
+    </button>
+    <input type="file" id="fileInput" accept="audio/*,video/*" hidden>
+  </header>
+
+  <div class="content">
+    <div id="askPanel"></div>
+    <div id="content"></div>
+  </div>
+</main>
+
+<div id="lightbox">
+  <button class="lb-close" id="lbClose">✕</button>
+  <div class="lb-card">
+    <div class="lb-left">
+      <img id="lbImg" alt="spectrogram">
+      <audio id="lbAudio" controls preload="none"></audio>
+    </div>
+    <div class="lb-right">
+      <div class="lb-head">
+        <h3 id="lbTitle"></h3>
+        <div class="lb-meta" id="lbMeta"></div>
+        <div class="lb-actions">
+          <button class="btn ghost" id="lbRerun">Re-run</button>
+          <button class="btn ghost danger" id="lbDelete">Delete</button>
+          <span id="lbStatus" style="font-size:12px;color:var(--text-3)"></span>
+          <span id="lbPlayErr" style="font-size:12px;color:var(--danger)"></span>
+        </div>
+      </div>
+      <div class="tabs">
+        <button data-tab="summary" class="active">Summary</button>
+        <button data-tab="transcript">Transcript</button>
+        <button id="langToggle" title="Translate summary">中文</button>
+      </div>
+      <div class="lb-body"><pre id="lbText"></pre></div>
+    </div>
+  </div>
+</div>
+
+<div id="dropHint">Drop audio files to upload</div>
+
+<script>
+let files = [];
+let openId = null;
+let openTab = "summary";
+let query = "";
+
+const $ = (id) => document.getElementById(id);
+
+function fmtDur(s) {
+  if (s == null) return "";
+  s = Math.round(s);
+  const m = Math.floor(s / 60), sec = String(s % 60).padStart(2, "0");
+  return m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
+function dayLabel(iso) {
+  const d = new Date(iso), today = new Date();
+  const yday = new Date(today); yday.setDate(today.getDate() - 1);
+  const same = (a, b) => a.toDateString() === b.toDateString();
+  if (same(d, today)) return "Today";
+  if (same(d, yday)) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "long", day: "numeric",
+    year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+}
+
+async function loadConfig() {
+  const c = await (await fetch("/api/config")).json();
+  $("cfg").innerHTML =
+    `<b>watching</b><br>${c.input_dir}<br><b>output</b><br>${c.output_dir}` +
+    `<br><b>models</b><br>${c.whisper_model.split("/").pop()}<br>${c.ollama_model}`;
+}
+
+function render() {
+  const shown = files.filter(f =>
+    !query || f.filename.toLowerCase().includes(query) || (matchIds && matchIds.has(f.id)));
+  const content = $("content");
+  if (!shown.length) {
+    content.innerHTML = `<div class="empty">${files.length ? "No matches." :
+      "No recordings yet — upload a file or drop one into the watched folder."}</div>`;
+    return;
+  }
+  const groups = new Map();
+  for (const f of shown) {
+    const key = dayLabel(f.created_at);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(f);
+  }
+  content.innerHTML = "";
+  for (const [label, items] of groups) {
+    const day = document.createElement("section");
+    day.className = "day";
+    day.innerHTML = `<h2>${label}<small>${items.length}</small></h2><div class="grid"></div>`;
+    const grid = day.querySelector(".grid");
+    for (const f of items) grid.appendChild(tile(f));
+    content.appendChild(day);
+  }
+}
+
+// version param busts the immutable browser cache when the thumbnail scheme changes
+function thumbUrl(f) {
+  return `/api/files/${f.id}/thumb?v=2-${f.created_at.slice(0, 10)}`;
+}
+
+function tile(f) {
+  const el = document.createElement("div");
+  el.className = "tile" + (selected.has(f.id) ? " selected" : "");
+  el.tabIndex = 0;
+  const badge = f.status !== "done" ? `<span class="badge ${f.status}">${f.status}</span>` : "";
+  const dur = f.duration != null ? `<span class="dur">${fmtDur(f.duration)}</span>` : "";
+  el.innerHTML =
+    `<div class="placeholder">…</div>` +
+    `<img loading="lazy" src="${thumbUrl(f)}" alt=""` +
+    ` onload="this.previousElementSibling.remove()" onerror="this.remove()">` +
+    `<span class="check">✓</span>` + badge + dur + `<div class="overlay">${f.filename}</div>`;
+  const toggle = () => {
+    selected.has(f.id) ? selected.delete(f.id) : selected.add(f.id);
+    el.classList.toggle("selected", selected.has(f.id));
+    updateBulkUI();
+  };
+  el.querySelector(".check").addEventListener("click", (e) => { e.stopPropagation(); toggle(); });
+  // While a selection is active, clicking tiles extends it (Google Photos style)
+  el.addEventListener("click", () => selected.size ? toggle() : openLightbox(f.id));
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter") openLightbox(f.id); });
+  return el;
+}
+
+/* ── Multi-select + bulk delete ── */
+const selected = new Set();
+
+function updateBulkUI() {
+  const btn = $("bulkDelete");
+  btn.style.display = selected.size ? "" : "none";
+  btn.textContent = `Delete (${selected.size})`;
+}
+
+$("bulkDelete").addEventListener("click", async () => {
+  const n = selected.size;
+  if (!n || !confirm(`Delete ${n} recording${n > 1 ? "s" : ""} and their transcripts, summaries, and output files? This cannot be undone.`)) return;
+  $("bulkDelete").disabled = true;
+  for (const id of [...selected]) {
+    const resp = await fetch(`/api/files/${id}`, { method: "DELETE" });
+    if (resp.ok || resp.status === 404) selected.delete(id);
+  }
+  $("bulkDelete").disabled = false;
+  if (selected.size) alert(`${selected.size} file(s) could not be deleted`);
+  selected.clear();
+  updateBulkUI();
+  refresh();
+});
+
+let lastPayload = "";
+async function refresh() {
+  const payload = await (await fetch("/api/files")).text();
+  if (payload !== lastPayload) {  // skip re-render (and thumb re-requests) when nothing changed
+    lastPayload = payload;
+    files = JSON.parse(payload);
+    for (const id of [...selected])  // drop selections whose files are gone
+      if (!files.some(f => f.id === id)) selected.delete(id);
+    updateBulkUI();
+    render();
+  }
+  if (openId !== null) fillLightbox(false);
+}
+
+/* ── Lightbox ── */
+async function openLightbox(id) {
+  openId = id;
+  openTab = "summary";
+  sumLang = "en";
+  $("langToggle").classList.remove("zh");
+  $("langToggle").textContent = "中文";
+  $("lightbox").classList.add("open");
+  $("lbPlayErr").textContent = "";
+  $("lbAudio").src = `/api/files/${id}/audio?v=3`;  // v busts stale cached headers
+  $("lbImg").src = thumbUrl(files.find(f => f.id === id) ?? { id, created_at: "" });
+  fillLightbox(true);
+}
+
+let lbBodyKey = null;  // avoid rebuilding the transcript DOM (and losing sync state) every poll
+
+function parseSegments(md) {
+  const segs = [];
+  for (const line of md.split("\n")) {
+    const m = line.match(/^\*\*\[(\d+):(\d{2})\]\*\*\s*(.*)$/);
+    if (m) segs.push({ start: Number(m[1]) * 60 + Number(m[2]), text: m[3] });
+  }
+  return segs;
+}
+
+function renderBody(text) {
+  const body = document.querySelector(".lb-body");
+  const segs = openTab === "transcript" && text ? parseSegments(text) : [];
+  if (!segs.length) {
+    body.innerHTML = `<pre></pre>`;
+    body.firstChild.textContent = text ?? "(not ready)";
+    return;
+  }
+  body.innerHTML = "";
+  for (const s of segs) {
+    const el = document.createElement("div");
+    el.className = "seg";
+    el.dataset.start = s.start;
+    el.innerHTML = `<span class="t">${fmtDur(s.start)}</span><p></p>`;
+    el.querySelector("p").textContent = s.text;
+    el.addEventListener("click", () => {
+      const a = $("lbAudio");
+      a.currentTime = s.start;
+      a.play();
+    });
+    body.appendChild(el);
+  }
+  syncTranscript();
+}
+
+function syncTranscript() {
+  const t = $("lbAudio").currentTime;
+  let active = null;
+  for (const el of document.querySelectorAll(".seg")) {
+    if (Number(el.dataset.start) <= t) active = el;
+  }
+  for (const el of document.querySelectorAll(".seg.active")) {
+    if (el !== active) el.classList.remove("active");
+  }
+  if (active && !active.classList.contains("active")) {
+    active.classList.add("active");
+    if (!$("lbAudio").paused)
+      active.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+}
+
+$("lbAudio").addEventListener("timeupdate", syncTranscript);
+$("lbAudio").addEventListener("error", () => {
+  const err = $("lbAudio").error;
+  // closing the lightbox clears src + load(), which fires a bogus error event
+  if (!$("lbAudio").getAttribute("src")) return;
+  if (err)
+    $("lbPlayErr").textContent =
+      `⚠ playback error (code ${err.code}: ${err.message || "unsupported or failed to load"})`;
+});
+// Media event trace for debugging playback issues (visible in the JS console).
+for (const ev of ["loadstart", "loadedmetadata", "canplay", "play", "playing",
+                  "pause", "waiting", "stalled", "suspend", "abort", "ended"])
+  $("lbAudio").addEventListener(ev, () =>
+    console.log(`audio event: ${ev} t=${$("lbAudio").currentTime.toFixed(2)}`));
+
+async function fillLightbox(reset) {
+  const f = await (await fetch(`/api/files/${openId}`)).json();
+  $("lbTitle").textContent = f.filename;
+  $("lbMeta").innerHTML =
+    [f.duration != null && fmtDur(f.duration), f.language, new Date(f.created_at).toLocaleString()]
+      .filter(Boolean).map(x => `<span>${x}</span>`).join("");
+  $("lbStatus").textContent = f.status + (f.error ? " — " + f.error : "");
+  document.querySelectorAll(".tabs button[data-tab]").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === openTab));
+  $("langToggle").style.display = openTab === "summary" ? "" : "none";
+  let text;
+  if (openTab === "summary" && sumLang === "zh")
+    text = zhCache.get(openId) ?? "(translating…)";
+  else
+    text = openTab === "summary" ? f.summary : f.transcript;
+  const key = `${openId}|${openTab}|${sumLang}|${text?.length ?? -1}`;
+  if (key !== lbBodyKey) {
+    lbBodyKey = key;
+    renderBody(text);
+  }
+  if (reset) document.querySelector(".lb-body").scrollTop = 0;
+}
+
+function closeLightbox() {
+  openId = null;
+  $("lightbox").classList.remove("open");
+  const a = $("lbAudio"); a.pause(); a.removeAttribute("src"); a.load();
+}
+
+$("lbClose").addEventListener("click", closeLightbox);
+$("lightbox").addEventListener("click", (e) => { if (e.target === $("lightbox")) closeLightbox(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (openId === null && selected.size) {  // no lightbox open: clear the selection
+      selected.clear();
+      updateBulkUI();
+      render();
+    }
+    closeLightbox();
+  }
+  if (e.key === " " && openId !== null &&
+      !["INPUT", "TEXTAREA", "AUDIO", "BUTTON"].includes(document.activeElement.tagName)) {
+    e.preventDefault();  // don't scroll the page
+    const a = $("lbAudio");
+    a.paused ? a.play() : a.pause();
+  }
+});
+document.querySelectorAll(".tabs button[data-tab]").forEach(b =>
+  b.addEventListener("click", () => { openTab = b.dataset.tab; fillLightbox(false); }));
+
+/* ── Summary language toggle ── */
+let sumLang = "en";
+const zhCache = new Map();
+const zhPending = new Set();
+
+$("langToggle").addEventListener("click", async () => {
+  sumLang = sumLang === "en" ? "zh" : "en";
+  $("langToggle").classList.toggle("zh", sumLang === "zh");
+  $("langToggle").textContent = sumLang === "zh" ? "EN" : "中文";
+  const id = openId;
+  if (sumLang === "zh" && id !== null && !zhCache.has(id) && !zhPending.has(id)) {
+    zhPending.add(id);
+    try {
+      const resp = await fetch(`/api/files/${id}/translate`, { method: "POST" });
+      const data = await resp.json();
+      zhCache.set(id, resp.ok ? data.summary_zh : "⚠ " + data.detail);
+    } catch (e) {
+      zhCache.set(id, "⚠ translation request failed: " + e);
+    } finally {
+      zhPending.delete(id);
+    }
+  }
+  if (openId !== null) fillLightbox(false);
+});
+$("lbDelete").addEventListener("click", async () => {
+  const f = files.find(f => f.id === openId);
+  if (!confirm(`Delete "${f?.filename ?? "this recording"}" and its transcript, summary, and output files? This cannot be undone.`)) return;
+  const resp = await fetch(`/api/files/${openId}`, { method: "DELETE" });
+  if (!resp.ok) {
+    $("lbStatus").textContent = "delete failed: " + (await resp.json()).detail;
+    return;
+  }
+  closeLightbox();
+  refresh();
+});
+
+$("lbRerun").addEventListener("click", async () => {
+  await fetch(`/api/files/${openId}/rerun`, { method: "POST" });
+  fillLightbox(false); refresh();
+});
+
+/* ── Upload ── */
+async function upload(file) {
+  const msg = $("uploadMsg");
+  msg.textContent = `uploading ${file.name}…`;
+  const body = new FormData();
+  body.append("file", file);
+  const resp = await fetch("/api/upload", { method: "POST", body });
+  msg.textContent = resp.ok ? "queued ✓" : "error: " + (await resp.json()).detail;
+  setTimeout(() => { if (msg.textContent.startsWith("queued")) msg.textContent = ""; }, 4000);
+  refresh();
+}
+
+$("uploadBtn").addEventListener("click", () => $("fileInput").click());
+$("fileInput").addEventListener("change", () => {
+  for (const f of $("fileInput").files) upload(f);
+  $("fileInput").value = "";
+});
+
+/* ── Mic recording ── */
+let recorder = null, recChunks = [], recTicker = null;
+
+function localStamp() {
+  const d = new Date(), p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_` +
+         `${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
+}
+
+$("recordBtn")?.addEventListener("click", async () => {
+  if (recorder) { recorder.stop(); return; }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    $("uploadMsg").textContent = "microphone access denied";
+    return;
+  }
+  // No Web Audio here, deliberately: tapping the mic stream with an
+  // AudioContext (even a cloned track) wedges Chrome-on-macOS audio capture,
+  // silencing every later recording until the browser restarts.
+  const track = stream.getAudioTracks()[0];
+  if (track.muted)
+    $("uploadMsg").textContent = "⚠ mic track is muted by the system";
+  track.onmute = () => $("uploadMsg").textContent = "⚠ mic went mute — no audio is being captured";
+
+  const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+  recChunks = [];
+  const recT0 = Date.now();
+  recorder = new MediaRecorder(stream, { mimeType: mime });
+  recorder.ondataavailable = (e) => {
+    recChunks.push(e.data);
+    console.log("rec chunk:", e.data.size, "bytes");
+  };
+  recorder.onerror = (e) => {
+    console.log("recorder error:", e.error || e);
+    $("uploadMsg").textContent = "⚠ recorder error: " + (e.error?.name || "unknown");
+  };
+  setTimeout(() => console.log("recorder state after 1.5s:", recorder?.state), 1500);
+  recorder.onstop = () => {
+    stream.getTracks().forEach(t => t.stop());
+    clearInterval(recTicker);
+    $("recordBtn").classList.remove("recording");
+    $("recordLabel").textContent = "Record";
+    recorder = null;
+    const blob = new Blob(recChunks, { type: mime });
+    const secs = (Date.now() - recT0) / 1000;
+    if (blob.size < 2048) {  // header-only blob: no audio was captured
+      $("uploadMsg").textContent = secs < 1.5
+        ? "recording too short — discarded"
+        : `[rec-v3] mic delivered no audio in ${secs.toFixed(1)}s ` +
+          `(${blob.size} bytes, ${recChunks.length} chunks, track muted: ${track.muted})`;
+      return;
+    }
+    const ext = mime === "audio/webm" ? "webm" : "mp4";
+    upload(new File([blob], `recording-${localStamp()}.${ext}`, { type: mime }));
+  };
+  recorder.start(1000);  // deliver a chunk every second so audio survives even odd stops
+  $("recordBtn").classList.add("recording");
+  $("recordLabel").textContent = "0:00";
+  recTicker = setInterval(() => {
+    $("recordLabel").textContent = fmtDur((Date.now() - recT0) / 1000);
+  }, 500);
+});
+
+let dragDepth = 0;
+document.addEventListener("dragenter", (e) => {
+  e.preventDefault();
+  if (++dragDepth === 1) $("dropHint").style.display = "flex";
+});
+document.addEventListener("dragleave", () => {
+  if (--dragDepth === 0) $("dropHint").style.display = "none";
+});
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  $("dropHint").style.display = "none";
+  for (const f of e.dataTransfer.files) upload(f);
+});
+
+/* ── Search (filenames + transcript full-text) and Ask AI ── */
+let matchIds = null;
+let searchTimer = null;
+
+$("searchInput").addEventListener("input", (e) => {
+  query = e.target.value.trim().toLowerCase();
+  render();  // instant filename filter; FTS results follow
+  clearTimeout(searchTimer);
+  if (!query) { matchIds = null; render(); return; }
+  searchTimer = setTimeout(async () => {
+    const hits = await (await fetch(`/api/search?q=${encodeURIComponent(query)}`)).json();
+    matchIds = new Set(hits.map(h => h.id));
+    render();
+  }, 250);
+});
+
+$("searchInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.value.trim()) askAI(e.target.value.trim());
+});
+
+async function askAI(question) {
+  const panel = $("askPanel");
+  panel.innerHTML = `<div class="ask-card"><div class="q"></div><div class="thinking">Searching recordings and thinking</div></div>`;
+  panel.querySelector(".q").textContent = question;
+  let data;
+  try {
+    const resp = await fetch("/api/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    data = resp.ok ? await resp.json() : { answer: "Error: " + (await resp.json()).detail, sources: [] };
+  } catch (err) {
+    data = { answer: "Request failed: " + err, sources: [] };
+  }
+  panel.innerHTML = `<div class="ask-card">
+    <button class="ask-close">✕</button>
+    <div class="q"></div><div class="a"></div><div class="ask-sources"></div>
+  </div>`;
+  panel.querySelector(".q").textContent = question;
+  panel.querySelector(".a").textContent = data.answer;
+  const srcBox = panel.querySelector(".ask-sources");
+  for (const s of data.sources) {
+    const b = document.createElement("button");
+    b.textContent = `#${s.id} ${s.filename}`;
+    b.addEventListener("click", () => openLightbox(s.id));
+    srcBox.appendChild(b);
+  }
+  panel.querySelector(".ask-close").addEventListener("click", () => panel.innerHTML = "");
+}
+
+loadConfig();
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>
