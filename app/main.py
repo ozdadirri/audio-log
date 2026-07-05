@@ -3,6 +3,8 @@ background threads."""
 
 import logging
 import shutil
+
+import httpx
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -162,11 +164,37 @@ def ask(body: AskBody):
     return assistant.ask(body.question)
 
 
+@app.get("/api/models")
+def list_models():
+    """Installed Ollama models plus the currently selected one."""
+    try:
+        resp = httpx.get(f"{config.OLLAMA_URL}/api/tags", timeout=5)
+        resp.raise_for_status()
+        models = [m["name"] for m in resp.json().get("models", [])]
+    except Exception as e:
+        raise HTTPException(502, f"cannot reach Ollama: {e}")
+    return {"models": models,
+            "current": db.get_setting("ollama_model", config.OLLAMA_MODEL)}
+
+
+class ModelBody(BaseModel):
+    model: str
+
+
+@app.post("/api/model")
+def set_model(body: ModelBody):
+    available = list_models()["models"]
+    if body.model not in available:
+        raise HTTPException(400, f"model not installed: {body.model}")
+    db.set_setting("ollama_model", body.model)
+    return {"current": body.model}
+
+
 @app.get("/api/config")
 def get_config():
     return {
         "input_dir": str(config.INPUT_DIR),
         "output_dir": str(config.OUTPUT_DIR),
         "whisper_model": config.WHISPER_MODEL,
-        "ollama_model": config.OLLAMA_MODEL,
+        "ollama_model": db.get_setting("ollama_model", config.OLLAMA_MODEL),
     }

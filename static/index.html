@@ -48,8 +48,17 @@
   }
   nav a.active { background: var(--primary); color: #fff; }
   nav a svg { width: 18px; height: 18px; flex-shrink: 0; }
-  .side-config {
-    margin-top: auto; font-size: 11px; color: var(--text-3);
+  .model-pick { margin-top: auto; padding: 0 4px; }
+  .model-pick label {
+    display: block; font-size: 11px; font-weight: 600; color: var(--text-3);
+    letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px;
+  }
+  .model-pick select {
+    width: 100%; font: inherit; font-size: 13px; color: var(--text);
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--card); cursor: pointer;
+  }
+  .side-config { font-size: 11px; color: var(--text-3);
     background: var(--bg); border-radius: var(--radius); padding: 12px;
     line-height: 1.7; overflow-wrap: break-word;
   }
@@ -255,6 +264,10 @@
       Library
     </a>
   </nav>
+  <div class="model-pick">
+    <label for="modelSelect">Summary model</label>
+    <select id="modelSelect"><option>loading…</option></select>
+  </div>
   <div class="side-config" id="cfg"></div>
 </aside>
 
@@ -268,11 +281,10 @@
       ⚙ processing — playback may stutter while the AI models run</span>
     <span id="uploadMsg"></span>
     <button class="btn danger-full" id="bulkDelete" style="display:none">Delete</button>
-    <!-- Record button removed while the Chrome audio-service crash persists; to
-         re-enable, restore:
-         <button class="btn ghost" id="recordBtn">
-           <span class="rec-dot"></span><span id="recordLabel">Record</span>
-         </button> -->
+    <button class="btn ghost" id="recordBtn">
+      <span class="rec-dot"></span>
+      <span id="recordLabel">Record</span>
+    </button>
     <button class="btn" id="uploadBtn">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 16V4m0 0 5 5m-5-5-5 5"/><path d="M4 20h16"/></svg>
       Upload audio
@@ -804,7 +816,36 @@ async function askAI(question) {
   panel.querySelector(".ask-close").addEventListener("click", () => panel.innerHTML = "");
 }
 
+/* ── Summary model picker ── */
+async function loadModels() {
+  const sel = $("modelSelect");
+  try {
+    const r = await (await fetch("/api/models")).json();
+    sel.innerHTML = "";
+    for (const m of r.models) {
+      const o = document.createElement("option");
+      o.value = o.textContent = m;
+      o.selected = m === r.current;
+      sel.appendChild(o);
+    }
+  } catch {
+    sel.innerHTML = "<option>Ollama offline</option>";
+  }
+}
+
+$("modelSelect").addEventListener("change", async (e) => {
+  const resp = await fetch("/api/model", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: e.target.value }),
+  });
+  if (!resp.ok) alert("could not set model: " + (await resp.json()).detail);
+  loadConfig();
+  loadModels();
+});
+
 loadConfig();
+loadModels();
 refresh();
 setInterval(refresh, 3000);
 </script>

@@ -54,6 +54,9 @@ def init():
             "CREATE VIRTUAL TABLE IF NOT EXISTS files_fts "
             "USING fts5(filename, transcript, summary)"
         )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+        )
         # Recover jobs that were mid-flight when the app last stopped.
         conn.execute(
             "UPDATE files SET status = 'pending', updated_at = ? "
@@ -144,6 +147,21 @@ def set_texts(file_id: int, transcript: str | None, summary: str | None):
             (transcript, summary, _now(), file_id),
         )
         _index(conn, file_id)
+
+
+def get_setting(key: str, default: str | None = None) -> str | None:
+    with connect() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else default
+
+
+def set_setting(key: str, value: str):
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
 
 
 def set_summary_zh(file_id: int, text: str):

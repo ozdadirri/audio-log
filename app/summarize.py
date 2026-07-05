@@ -3,7 +3,7 @@ map-reduce style: chunk -> summarize each -> merge."""
 
 import httpx
 
-from . import config
+from . import config, db
 
 # Roughly 4 chars/token; qwen3.x handles 32k tokens comfortably, stay well under.
 CHUNK_CHARS = 16_000
@@ -42,7 +42,8 @@ def _ollama_chat(prompt: str) -> str:
     resp = httpx.post(
         f"{config.OLLAMA_URL}/api/chat",
         json={
-            "model": config.OLLAMA_MODEL,
+            # the UI can switch models at runtime; env var is the default
+            "model": db.get_setting("ollama_model", config.OLLAMA_MODEL),
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
             "think": False,
