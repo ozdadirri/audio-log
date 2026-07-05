@@ -193,6 +193,16 @@
   .seg.active .t { color: var(--primary); }
   .seg p { font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
   .seg.active p { color: var(--text); }
+  .md h3 { font-size: 16px; font-weight: 700; margin: 4px 0 10px; }
+  .md h4 {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+    color: var(--primary); margin: 18px 0 6px;
+  }
+  .md h5, .md h6 { font-size: 13px; font-weight: 700; margin: 12px 0 4px; }
+  .md p { font-size: 14px; line-height: 1.75; color: var(--text-2); margin: 6px 0; }
+  .md ul { margin: 6px 0; padding-left: 22px; }
+  .md li { font-size: 14px; line-height: 1.75; color: var(--text-2); margin: 3px 0; }
+  .md code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
   .lb-close {
     position: absolute; top: 20px; right: 24px; border: 0; cursor: pointer;
     width: 38px; height: 38px; border-radius: 50%;
@@ -204,7 +214,7 @@
     padding: 20px 22px; margin-bottom: 24px;
   }
   .ask-card .q { font-size: 13px; font-weight: 700; color: var(--primary); margin-bottom: 10px; }
-  .ask-card .a { font-size: 14px; line-height: 1.75; color: var(--text-2); white-space: pre-wrap; }
+  .ask-card .a { font-size: 14px; line-height: 1.75; color: var(--text-2); }
   .ask-card .thinking { color: var(--text-3); font-size: 13.5px; }
   .ask-card .thinking::after {
     content: ""; display: inline-block; width: 1em; text-align: left;
@@ -254,6 +264,8 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <input id="searchInput" type="search" placeholder="Search transcripts — press Enter to ask AI…">
     </div>
+    <span id="busyNote" style="display:none;font-size:12px;color:var(--warn);font-weight:600">
+      ⚙ processing — playback may stutter while the AI models run</span>
     <span id="uploadMsg"></span>
     <button class="btn danger-full" id="bulkDelete" style="display:none">Delete</button>
     <!-- Record button removed while the Chrome audio-service crash persists; to
@@ -425,6 +437,8 @@ async function refresh() {
     updateBulkUI();
     render();
   }
+  $("busyNote").style.display =
+    files.some(f => ["pending", "transcribing", "summarizing"].includes(f.status)) ? "" : "none";
   if (openId !== null) fillLightbox(false);
 }
 
@@ -453,12 +467,41 @@ function parseSegments(md) {
   return segs;
 }
 
+// Minimal markdown renderer (headings, bullets, bold/italic/code), HTML-escaped.
+function renderMarkdown(md) {
+  const esc = md.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inline = (s) => s
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/(^|\s)\*(?!\s)([^*]+?)\*(?=\s|$|[.,;:!?])/g, "$1<i>$2</i>");
+  const out = [];
+  let inList = false;
+  for (const line of esc.split("\n")) {
+    const li = line.match(/^\s*[*-]\s+(.*)/);
+    if (li) {
+      if (!inList) { out.push("<ul>"); inList = true; }
+      out.push(`<li>${inline(li[1])}</li>`);
+      continue;
+    }
+    if (inList) { out.push("</ul>"); inList = false; }
+    const h = line.match(/^(#{1,4})\s+(.*)/);
+    if (h) out.push(`<h${h[1].length + 2}>${inline(h[2])}</h${h[1].length + 2}>`);
+    else if (line.trim()) out.push(`<p>${inline(line)}</p>`);
+  }
+  if (inList) out.push("</ul>");
+  return out.join("\n");
+}
+
 function renderBody(text) {
   const body = document.querySelector(".lb-body");
   const segs = openTab === "transcript" && text ? parseSegments(text) : [];
   if (!segs.length) {
-    body.innerHTML = `<pre></pre>`;
-    body.firstChild.textContent = text ?? "(not ready)";
+    if (openTab === "summary" && text)
+      body.innerHTML = `<div class="md">${renderMarkdown(text)}</div>`;
+    else {
+      body.innerHTML = `<pre></pre>`;
+      body.firstChild.textContent = text ?? "(not ready)";
+    }
     return;
   }
   body.innerHTML = "";
@@ -501,7 +544,17 @@ $("lbAudio").addEventListener("error", () => {
   if (!$("lbAudio").getAttribute("src")) return;
   if (err)
     $("lbPlayErr").textContent =
-      `⚠ playback error (code ${err.code}: ${err.message || "unsupported or failed to load"})`;
+      `⚠ playback error (code ${err.code}: ${err.message || "unsupported or failed to load"})` +
+      (err.code >= 2 ? " — likely the browser audio wedge, not this file: run /mictest Test 4; if no beep, reboot or `sudo killall coreaudiod`" : "");
+});
+// Wedge detector: 'playing' fired but the clock never advances -> audio service is dead.
+$("lbAudio").addEventListener("playing", () => {
+  const a = $("lbAudio"), t = a.currentTime;
+  setTimeout(() => {
+    if (!a.paused && a.currentTime === t && a.getAttribute("src"))
+      $("lbPlayErr").textContent =
+        "⚠ audio pipeline stalled — browser audio is wedged (reboot or `sudo killall coreaudiod`, then chrome://restart)";
+  }, 2000);
 });
 // Media event trace for debugging playback issues (visible in the JS console).
 for (const ev of ["loadstart", "loadedmetadata", "canplay", "play", "playing",
@@ -739,7 +792,8 @@ async function askAI(question) {
     <div class="q"></div><div class="a"></div><div class="ask-sources"></div>
   </div>`;
   panel.querySelector(".q").textContent = question;
-  panel.querySelector(".a").textContent = data.answer;
+  panel.querySelector(".a").classList.add("md");
+  panel.querySelector(".a").innerHTML = renderMarkdown(data.answer);
   const srcBox = panel.querySelector(".ask-sources");
   for (const s of data.sources) {
     const b = document.createElement("button");
