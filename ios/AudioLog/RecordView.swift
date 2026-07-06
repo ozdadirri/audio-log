@@ -12,14 +12,12 @@ final class Recorder: ObservableObject {
     private(set) var fileURL: URL?
 
     func start() {
-        AVAudioSession.sharedInstance().requestRecordPermission { granted in
-            Task { @MainActor in
-                guard granted else {
-                    self.errorMessage = "Microphone access denied — enable it in Settings."
-                    return
-                }
-                self.beginRecording()
+        Task { @MainActor in
+            guard await AVAudioApplication.requestRecordPermission() else {
+                self.errorMessage = "Microphone access denied — enable it in Settings."
+                return
             }
+            self.beginRecording()
         }
     }
 
