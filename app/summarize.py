@@ -65,6 +65,18 @@ def translate_zh(text: str) -> str:
     return _ollama_chat(TRANSLATE_ZH_PROMPT.format(text=text))
 
 
+TITLE_PROMPT = """Based on this digest of an audio recording, write a short descriptive
+title of at most 8 words. Output only the title itself — no quotes, no punctuation
+at the end, no explanation.
+
+{text}"""
+
+
+def make_title(summary: str) -> str:
+    title = _ollama_chat(TITLE_PROMPT.format(text=summary)).strip().strip('"')
+    return title.splitlines()[0][:80] if title else ""
+
+
 def summarize(transcript: str) -> str:
     if len(transcript) <= CHUNK_CHARS:
         return _ollama_chat(SUMMARY_PROMPT.format(text=transcript))

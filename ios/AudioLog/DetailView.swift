@@ -54,7 +54,8 @@ struct DetailView: View {
                 withAnimation { proxy.scrollTo(id, anchor: .center) }
             }
         }
-        .navigationTitle(detail?.filename ?? "Recording")
+        .navigationTitle(detail.map { $0.title?.isEmpty == false ? $0.title! : $0.filename }
+                         ?? "Recording")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -85,7 +86,7 @@ struct DetailView: View {
 
     // A minimal RecordingFile so thumbURL can be reused for the header image.
     private var placeholderFile: RecordingFile {
-        RecordingFile(id: fileID, filename: detail?.filename ?? "",
+        RecordingFile(id: fileID, filename: detail?.filename ?? "", title: nil,
                       status: detail?.status ?? "done", error: nil,
                       language: nil, duration: detail?.duration, owner: nil,
                       createdAt: detail?.createdAt ?? "", updatedAt: "")

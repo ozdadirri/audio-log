@@ -222,6 +222,24 @@ def translate(file_id: int, request: Request):
     return {"summary_zh": zh}
 
 
+@app.post("/api/backfill-titles")
+def backfill_titles(request: Request):
+    """Admin: generate titles for already-processed files that lack one."""
+    _require_admin(request)
+    done = 0
+    for row in db.list_files():
+        if row.get("title") or row["status"] != "done":
+            continue
+        detail = db.get_file(row["id"])
+        if not detail.get("summary"):
+            continue
+        title = summarize_mod.make_title(detail["summary"])
+        if title:
+            db.set_title(row["id"], title)
+            done += 1
+    return {"titled": done}
+
+
 @app.get("/api/search")
 def search(request: Request, q: str = ""):
     user = request.state.user

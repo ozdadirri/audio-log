@@ -513,7 +513,8 @@ function tile(f) {
     ` onload="this.previousElementSibling.remove()" onerror="this.remove()">` +
     `<span class="check">✓</span>` + badge + dur +
     (me?.is_admin && f.owner ? `<span class="owner"></span>` : "") +
-    `<div class="overlay">${f.filename}</div>`;
+    `<div class="overlay"></div>`;
+  el.querySelector(".overlay").textContent = f.title || f.filename;
   if (me?.is_admin && f.owner) el.querySelector(".owner").textContent = f.owner;
   const toggle = () => {
     selected.has(f.id) ? selected.delete(f.id) : selected.add(f.id);
@@ -698,10 +699,10 @@ for (const ev of ["loadstart", "loadedmetadata", "canplay", "play", "playing",
 
 async function fillLightbox(reset) {
   const f = await (await fetch(`/api/files/${openId}`)).json();
-  $("lbTitle").textContent = f.filename;
+  $("lbTitle").textContent = f.title || f.filename;
   $("lbMeta").innerHTML =
-    [f.duration != null && fmtDur(f.duration), f.language, new Date(f.created_at).toLocaleString(),
-     me?.is_admin && f.owner && `👤 ${f.owner}`]
+    [f.title && f.filename, f.duration != null && fmtDur(f.duration), f.language,
+     new Date(f.created_at).toLocaleString(), me?.is_admin && f.owner && `👤 ${f.owner}`]
       .filter(Boolean).map(x => `<span>${x}</span>`).join("");
   $("lbStatus").textContent = f.status + (f.error ? " — " + f.error : "");
   document.querySelectorAll(".tabs button[data-tab]").forEach(b =>
