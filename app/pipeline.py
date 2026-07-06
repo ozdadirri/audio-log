@@ -134,6 +134,17 @@ def _process(job):
         except Exception:
             log.exception("publish failed for %s", out_dir.name)
 
+    # Auto-maintain the owner's long-term memory — but only once they've built
+    # one; the first build stays a deliberate user action.
+    try:
+        row = db.get_file(file_id)
+        owner = db.get_user_by_id(row["user_id"]) if row and row.get("user_id") else None
+        if owner and db.get_memory(owner["id"]):
+            from . import memory
+            memory.build(owner)
+    except Exception:
+        log.exception("memory auto-update failed for %s", source.name)
+
 
 def start_background_threads() -> list[threading.Thread]:
     threads = [

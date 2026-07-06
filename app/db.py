@@ -195,6 +195,12 @@ def set_texts(file_id: int, transcript: str | None, summary: str | None):
 
 # ── Users ─────────────────────────────────────────────────────────────────
 
+def get_user_by_id(user_id: int) -> dict | None:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+
+
 def get_user_by_key(api_key: str) -> dict | None:
     with connect() as conn:
         row = conn.execute("SELECT * FROM users WHERE api_key = ?", (api_key,)).fetchone()
