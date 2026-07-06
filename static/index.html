@@ -420,6 +420,7 @@
         <div class="lb-meta" id="lbMeta"></div>
         <div class="lb-actions">
           <button class="btn ghost" id="lbExport">Export</button>
+          <button class="btn ghost" id="lbMemX" title="Include or exclude this recording from memory builds"></button>
           <button class="btn ghost" id="lbRerun">Re-run</button>
           <button class="btn ghost danger" id="lbDelete">Delete</button>
           <span id="lbStatus" style="font-size:12px;color:var(--text-3)"></span>
@@ -791,6 +792,9 @@ async function fillLightbox(reset) {
       .filter(Boolean).map(x => `<span>${x}</span>`).join("") +
     fileTags(f).map(t => ` <span class="tag">#${t}</span>`).join("");
   $("lbStatus").textContent = f.status + (f.error ? " — " + f.error : "");
+  $("lbMemX").textContent = f.mem_exclude ? "Memory: excluded" : "Memory: included";
+  $("lbMemX").classList.toggle("danger", !!f.mem_exclude);
+  $("lbMemX").dataset.exclude = f.mem_exclude ? "1" : "0";
   document.querySelectorAll(".tabs button[data-tab]").forEach(b =>
     b.classList.toggle("active", b.dataset.tab === openTab));
   $("langToggle").style.display = openTab === "summary" ? "" : "none";
@@ -860,6 +864,18 @@ $("langToggle").addEventListener("click", async () => {
 });
 $("lbExport").addEventListener("click", () => {
   location.href = `/api/files/${openId}/export`;  // cookie carries the key
+});
+
+$("lbMemX").addEventListener("click", async () => {
+  const exclude = $("lbMemX").dataset.exclude !== "1";
+  const resp = await fetch(`/api/files/${openId}/mem-exclude`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ exclude }),
+  });
+  await fillLightbox(false);
+  if (resp.ok && exclude)
+    $("lbStatus").textContent = "excluded — reset & rebuild Memory to remove it from the existing document";
 });
 
 $("lbDelete").addEventListener("click", async () => {

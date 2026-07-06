@@ -157,6 +157,19 @@ def upload(file: UploadFile, request: Request):
     return {"saved": str(dest), "id": file_id}
 
 
+class MemExcludeBody(BaseModel):
+    exclude: bool
+
+
+@app.post("/api/files/{file_id}/mem-exclude")
+def set_mem_exclude(file_id: int, body: MemExcludeBody, request: Request):
+    """Flag a recording to be skipped by future memory builds (default included).
+    Already-built memory is unaffected until the user resets and rebuilds."""
+    _fetch_owned(file_id, request)
+    db.set_mem_exclude(file_id, body.exclude)
+    return {"id": file_id, "mem_exclude": body.exclude}
+
+
 @app.get("/api/memory")
 def get_memory(request: Request):
     return memory.status(request.state.user)

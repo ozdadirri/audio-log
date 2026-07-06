@@ -4,11 +4,8 @@ __pycache__/
 *.pyc
 
 # user data: db, transcripts, summaries, caches, and all audio
-# except the bundled sample recording
-data/*
-!data/input/
-data/input/*
-!data/input/standup.aiff
+# (the sample recording lives in samples/, outside the watched folder)
+data/
 .DS_Store
 
 # local secrets

@@ -72,6 +72,8 @@ def init():
                 conn.execute(f"ALTER TABLE files ADD COLUMN {col} TEXT")
         if "user_id" not in cols:
             conn.execute("ALTER TABLE files ADD COLUMN user_id INTEGER")
+        if "mem_exclude" not in cols:
+            conn.execute("ALTER TABLE files ADD COLUMN mem_exclude INTEGER NOT NULL DEFAULT 0")
         mem_cols = {r[1] for r in conn.execute("PRAGMA table_info(memories)")}
         if mem_cols and "content_zh" not in mem_cols:
             conn.execute("ALTER TABLE memories ADD COLUMN content_zh TEXT")
@@ -269,17 +271,25 @@ def delete_memory(user_id: int):
 
 
 def memory_pending(user: dict, last_file_id: int) -> list[dict]:
-    """Summarized files newer than the memory watermark, visible to this user."""
+    """Summarized files newer than the memory watermark, visible to this user
+    and not flagged as excluded from memory."""
     scope = "" if user["is_admin"] else "AND user_id = ? "
     args = (last_file_id, user["id"]) if not user["is_admin"] else (last_file_id,)
     with connect() as conn:
         rows = conn.execute(
             "SELECT id, filename, title, created_at, summary FROM files "
             "WHERE status = 'done' AND summary IS NOT NULL AND id > ? "
+            "AND COALESCE(mem_exclude, 0) = 0 "
             f"{scope}ORDER BY id",
             args,
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def set_mem_exclude(file_id: int, exclude: bool):
+    with connect() as conn:
+        conn.execute("UPDATE files SET mem_exclude = ? WHERE id = ?",
+                     (1 if exclude else 0, file_id))
 
 
 def get_setting(key: str, default: str | None = None) -> str | None:
