@@ -9,10 +9,16 @@ struct LibraryView: View {
     @State private var showAsk = false
     @State private var showImporter = false
     @State private var uploadMessage: String?
+    @State private var me: Me?
+    @State private var adminUsers: [UserAccount] = []
+    @State private var ownerFilter: String?
+    @State private var showProfile = false
 
     private var shown: [RecordingFile] {
-        guard !searchText.isEmpty else { return files }
-        return files.filter { $0.filename.localizedCaseInsensitiveContains(searchText) }
+        files.filter { file in
+            (ownerFilter == nil || file.owner == ownerFilter) &&
+            (searchText.isEmpty || file.filename.localizedCaseInsensitiveContains(searchText))
+        }
     }
 
     /// Files grouped by local day, newest group first.
@@ -52,7 +58,7 @@ struct LibraryView: View {
                                       spacing: 6) {
                                 ForEach(group.items) { file in
                                     NavigationLink(value: file.id) {
-                                        TileView(file: file)
+                                        TileView(file: file, showOwner: me?.isAdmin == true)
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -74,14 +80,37 @@ struct LibraryView: View {
             .searchable(text: $searchText, prompt: "Filter recordings")
             .refreshable { await load() }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showProfile = true } label: {
+                        Image(systemName: me?.isAdmin == true ? "person.circle.fill" : "person.circle")
+                    }
+                }
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    if me?.isAdmin == true {
+                        Menu {
+                            Picker("Owner", selection: $ownerFilter) {
+                                Text("All users").tag(String?.none)
+                                ForEach(adminUsers) { user in
+                                    Text("\(user.username) (\(user.fileCount ?? 0))")
+                                        .tag(String?.some(user.username))
+                                }
+                            }
+                        } label: {
+                            Image(systemName: ownerFilter == nil
+                                  ? "line.3.horizontal.decrease.circle"
+                                  : "line.3.horizontal.decrease.circle.fill")
+                        }
+                    }
                     Button { showAsk = true } label: { Image(systemName: "sparkles") }
                     Button { showRecorder = true } label: { Image(systemName: "mic.circle") }
                     Button { showImporter = true } label: { Image(systemName: "square.and.arrow.up") }
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
                 }
             }
-            .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(isPresented: $showSettings, onDismiss: { Task { await loadProfile() } }) {
+                SettingsView()
+            }
+            .sheet(isPresented: $showProfile) { ProfileView(me: me) }
             .sheet(isPresented: $showAsk) { AskView() }
             .sheet(isPresented: $showRecorder, onDismiss: { Task { await load() } }) {
                 RecordView()
@@ -103,9 +132,20 @@ struct LibraryView: View {
     }
 
     private func pollLoop() async {
+        await loadProfile()
         while !Task.isCancelled {
             await load()
             try? await Task.sleep(for: .seconds(5))
+        }
+    }
+
+    private func loadProfile() async {
+        me = try? await APIClient.me()
+        if me?.isAdmin == true {
+            adminUsers = (try? await APIClient.listUsers()) ?? []
+        } else {
+            adminUsers = []
+            ownerFilter = nil
         }
     }
 
@@ -139,6 +179,7 @@ struct LibraryView: View {
 
 struct TileView: View {
     let file: RecordingFile
+    var showOwner = false
 
     var body: some View {
         AsyncImage(url: APIClient.thumbURL(for: file)) { image in
@@ -164,6 +205,16 @@ struct TileView: View {
                     .font(.caption2.bold()).foregroundStyle(.white)
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(file.status == "error" ? .red : .orange, in: Capsule())
+                    .padding(6)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if showOwner, let owner = file.owner {
+                Text(owner)
+                    .font(.caption2.bold()).foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.black.opacity(0.55), in: Capsule())
                     .padding(6)
             }
         }

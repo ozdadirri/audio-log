@@ -87,7 +87,7 @@ struct DetailView: View {
     private var placeholderFile: RecordingFile {
         RecordingFile(id: fileID, filename: detail?.filename ?? "",
                       status: detail?.status ?? "done", error: nil,
-                      language: nil, duration: detail?.duration,
+                      language: nil, duration: detail?.duration, owner: nil,
                       createdAt: detail?.createdAt ?? "", updatedAt: "")
     }
 
