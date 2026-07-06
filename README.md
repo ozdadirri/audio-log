@@ -116,6 +116,26 @@ Voice Memos app and share/upload the file instead, or record on the Mac.
 | DELETE | `/api/users/{id}` | admin: delete user; their files move to admin |
 | GET | `/api/config` | effective configuration |
 
+## Remote access & HTTPS (Tailscale)
+
+Install [Tailscale](https://tailscale.com) on the Mac and your devices (same
+account) and the server is reachable anywhere at
+`http://<your-mac>.<tailnet>.ts.net:8300` — private to your tailnet, no ports
+opened. Do **not** use Tailscale *Funnel* for this server (it would expose the
+API to the public internet).
+
+To add HTTPS (required for mic recording in the browser/PWA away from
+localhost), run once on the Mac:
+
+```bash
+tailscale serve --bg 8300
+```
+
+Tailscale then proxies `https://<your-mac>.<tailnet>.ts.net` (no port) to the
+server with a valid certificate. Re-add the PWA to your home screen from the
+https URL and the in-browser Record button works remotely. `tailscale serve
+status` shows the config; `tailscale serve reset` removes it.
+
 ## Users
 
 Each user has a username and an API key — the key is the login. On first start
