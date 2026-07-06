@@ -35,6 +35,13 @@ CREATE TABLE IF NOT EXISTS users (
     is_admin   INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS memories (
+    user_id      INTEGER PRIMARY KEY,
+    content      TEXT NOT NULL,
+    last_file_id INTEGER NOT NULL DEFAULT 0,
+    updated_at   TEXT NOT NULL
+);
 """
 
 VALID_STATUSES = {"pending", "transcribing", "summarizing", "done", "error"}
@@ -224,6 +231,44 @@ def delete_user(user_id: int, reassign_to: int):
     with connect() as conn:
         conn.execute("UPDATE files SET user_id = ? WHERE user_id = ?", (reassign_to, user_id))
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+
+# ── Memory ────────────────────────────────────────────────────────────────
+
+def get_memory(user_id: int) -> dict | None:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM memories WHERE user_id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def set_memory(user_id: int, content: str, last_file_id: int):
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO memories (user_id, content, last_file_id, updated_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+            "content = excluded.content, last_file_id = excluded.last_file_id, "
+            "updated_at = excluded.updated_at",
+            (user_id, content, last_file_id, _now()),
+        )
+
+
+def delete_memory(user_id: int):
+    with connect() as conn:
+        conn.execute("DELETE FROM memories WHERE user_id = ?", (user_id,))
+
+
+def memory_pending(user: dict, last_file_id: int) -> list[dict]:
+    """Summarized files newer than the memory watermark, visible to this user."""
+    scope = "" if user["is_admin"] else "AND user_id = ? "
+    args = (last_file_id, user["id"]) if not user["is_admin"] else (last_file_id,)
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT id, filename, title, created_at, summary FROM files "
+            "WHERE status = 'done' AND summary IS NOT NULL AND id > ? "
+            f"{scope}ORDER BY id",
+            args,
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def get_setting(key: str, default: str | None = None) -> str | None:
