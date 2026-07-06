@@ -72,6 +72,26 @@ at the end, no explanation.
 {text}"""
 
 
+TAG_VOCABULARY = [
+    "meeting", "standup", "interview", "call", "idea", "journal",
+    "note", "lecture", "demo", "music", "personal", "work",
+]
+
+TAGS_PROMPT = """Classify this recording digest with 1 to 3 tags.
+Prefer tags from this list: {vocab}.
+You may invent one extra tag if none fit well.
+Output ONLY the tags, lowercase, comma-separated — nothing else.
+
+{text}"""
+
+
+def make_tags(summary: str) -> str:
+    raw = _ollama_chat(TAGS_PROMPT.format(vocab=", ".join(TAG_VOCABULARY), text=summary))
+    tags = [t.strip().lower() for t in raw.splitlines()[0].split(",")]
+    tags = [t for t in tags if t and len(t) <= 20 and t.replace("-", "").isalnum()]
+    return ",".join(dict.fromkeys(tags[:3]))  # dedupe, max 3
+
+
 def make_title(summary: str) -> str:
     title = _ollama_chat(TITLE_PROMPT.format(text=summary)).strip().strip('"')
     return title.splitlines()[0][:80] if title else ""

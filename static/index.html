@@ -239,14 +239,18 @@
     width: 38px; height: 38px; border-radius: 50%;
     background: rgba(255,255,255,.12); color: #fff; font-size: 17px;
   }
-  /* ── Owner filter chips (admin) ──────────── */
-  #ownerChips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
-  #ownerChips button {
+  /* ── Filter chips (owner: admin-only; tags: everyone) ── */
+  #ownerChips, #tagChips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  #ownerChips button, #tagChips button {
     border: 1px solid var(--line); background: var(--card); cursor: pointer;
     font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-2);
     padding: 6px 14px; border-radius: 999px;
   }
   #ownerChips button.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+  #tagChips button.active { background: var(--text); border-color: var(--text); color: #fff; }
+  .lb-meta .tag {
+    background: var(--bg); border-radius: 999px; padding: 1px 10px; font-weight: 600;
+  }
 
   /* ── Ask AI panel ────────────────────────── */
   .ask-card {
@@ -383,6 +387,7 @@
 
   <div class="content">
     <div id="ownerChips" style="display:none"></div>
+    <div id="tagChips" style="display:none"></div>
     <div id="askPanel"></div>
     <div id="content"></div>
   </div>
@@ -474,9 +479,37 @@ async function loadConfig() {
     `<br><b>models</b><br>${c.whisper_model.split("/").pop()}<br>${c.ollama_model}`;
 }
 
+function fileTags(f) {
+  return f.tags ? f.tags.split(",") : [];
+}
+
+let tagFilter = null;
+
+function renderTagChips() {
+  const counts = new Map();
+  for (const f of files)
+    for (const t of fileTags(f)) counts.set(t, (counts.get(t) || 0) + 1);
+  const box = $("tagChips");
+  if (!counts.size) { box.style.display = "none"; return; }
+  if (tagFilter && !counts.has(tagFilter)) tagFilter = null;
+  box.innerHTML = "";
+  const chips = [["all", null]].concat([...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([t, n]) => [`#${t} (${n})`, t]));
+  for (const [label, value] of chips) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.classList.toggle("active", tagFilter === value);
+    b.addEventListener("click", () => { tagFilter = value; renderTagChips(); render(); });
+    box.appendChild(b);
+  }
+  box.style.display = "";
+}
+
 function render() {
   const shown = files.filter(f =>
     (!ownerFilter || f.owner === ownerFilter) &&
+    (!tagFilter || fileTags(f).includes(tagFilter)) &&
     (!query || f.filename.toLowerCase().includes(query) || (matchIds && matchIds.has(f.id))));
   const content = $("content");
   if (!shown.length) {
@@ -575,6 +608,7 @@ async function refresh() {
     for (const id of [...selected])  // drop selections whose files are gone
       if (!files.some(f => f.id === id)) selected.delete(id);
     updateBulkUI();
+    renderTagChips();
     render();
   }
   $("busyNote").style.display =
@@ -708,7 +742,8 @@ async function fillLightbox(reset) {
   $("lbMeta").innerHTML =
     [f.title && f.filename, f.duration != null && fmtDur(f.duration), f.language,
      new Date(f.created_at).toLocaleString(), me?.is_admin && f.owner && `👤 ${f.owner}`]
-      .filter(Boolean).map(x => `<span>${x}</span>`).join("");
+      .filter(Boolean).map(x => `<span>${x}</span>`).join("") +
+    fileTags(f).map(t => ` <span class="tag">#${t}</span>`).join("");
   $("lbStatus").textContent = f.status + (f.error ? " — " + f.error : "");
   document.querySelectorAll(".tabs button[data-tab]").forEach(b =>
     b.classList.toggle("active", b.dataset.tab === openTab));
