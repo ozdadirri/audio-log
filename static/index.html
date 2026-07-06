@@ -308,7 +308,10 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 16V4m0 0 5 5m-5-5-5 5"/><path d="M4 20h16"/></svg>
       Upload audio
     </button>
-    <input type="file" id="fileInput" accept="audio/*,video/*" hidden>
+    <!-- explicit extensions: iOS Safari's Files picker grays out valid audio
+         when it only has MIME wildcards to match against -->
+    <input type="file" id="fileInput" hidden multiple
+           accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.ogg,.opus,.aiff,.aif,.wma,.amr,.mp4,.webm,.mov">
   </header>
 
   <div class="content">
