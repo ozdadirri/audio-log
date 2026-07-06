@@ -48,7 +48,8 @@ def _scan_once():
             _seen_sizes[path] = size  # first sighting or still growing; check next scan
             continue
         digest = _sha256(path)
-        file_id = db.add_file(digest, path.name, str(path))
+        # Watched-folder files have no uploader; they belong to the admin.
+        file_id = db.add_file(digest, path.name, str(path), user_id=db.admin_user_id())
         if file_id is not None:
             log.info("queued %s (id=%s)", path.name, file_id)
 

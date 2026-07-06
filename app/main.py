@@ -2,13 +2,14 @@
 background threads."""
 
 import logging
+import re
 import shutil
 
 import httpx
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -35,16 +36,35 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.middleware("http")
 async def require_api_key(request, call_next):
-    """Optional auth: when AUDIOLOG_API_KEY is set, every /api request must
-    present it via X-API-Key header, ?key= query param, or audiolog_key cookie
-    (query/cookie exist because <img>/<audio> loads can't set headers)."""
-    if config.API_KEY and request.url.path.startswith("/api"):
+    """Every /api request must carry a user's API key (X-API-Key header, ?key=
+    query param, or audiolog_key cookie — query/cookie exist because
+    <img>/<audio> loads can't set headers). The key identifies the user."""
+    if request.url.path.startswith("/api"):
         supplied = (request.headers.get("x-api-key")
                     or request.query_params.get("key")
                     or request.cookies.get("audiolog_key"))
-        if supplied != config.API_KEY:
+        user = db.get_user_by_key(supplied) if supplied else None
+        if user is None:
             return JSONResponse({"detail": "invalid or missing API key"}, status_code=401)
+        request.state.user = user
     return await call_next(request)
+
+
+def _fetch_owned(file_id: int, request: Request) -> dict:
+    """The file row, if it exists and the caller owns it (admin owns all).
+    404 either way, so users can't probe for other people's file ids."""
+    row = db.get_file(file_id)
+    user = request.state.user
+    if row is None or (not user["is_admin"] and row.get("user_id") != user["id"]):
+        raise HTTPException(404)
+    return row
+
+
+def _require_admin(request: Request) -> dict:
+    user = request.state.user
+    if not user["is_admin"]:
+        raise HTTPException(403, "admin only")
+    return user
 
 
 @app.get("/")
@@ -61,15 +81,14 @@ def mictest():
 
 
 @app.get("/api/files")
-def list_files():
-    return db.list_files()
+def list_files(request: Request):
+    user = request.state.user
+    return db.list_files(None if user["is_admin"] else user["id"])
 
 
 @app.get("/api/files/{file_id}")
-def get_file(file_id: int):
-    row = db.get_file(file_id)
-    if row is None:
-        raise HTTPException(404)
+def get_file(file_id: int, request: Request):
+    row = _fetch_owned(file_id, request)
     # Texts live in the DB; fall back to the markdown files for old rows.
     out = Path(row["output_dir"]) if row["output_dir"] else None
     for key, name in (("transcript", "transcript.md"), ("summary", "summary.md")):
@@ -81,10 +100,8 @@ def get_file(file_id: int):
 
 
 @app.get("/api/files/{file_id}/thumb")
-def get_thumb(file_id: int):
-    row = db.get_file(file_id)
-    if row is None:
-        raise HTTPException(404)
+def get_thumb(file_id: int, request: Request):
+    row = _fetch_owned(file_id, request)
     path = thumbnail.get_or_create(row["sha256"], row["source_path"], row["created_at"])
     if path is None:
         raise HTTPException(404, "thumbnail unavailable")
@@ -101,9 +118,9 @@ AUDIO_MEDIA_TYPES = {
 
 
 @app.get("/api/files/{file_id}/audio")
-def get_audio(file_id: int):
-    row = db.get_file(file_id)
-    if row is None or not Path(row["source_path"]).exists():
+def get_audio(file_id: int, request: Request):
+    row = _fetch_owned(file_id, request)
+    if not Path(row["source_path"]).exists():
         raise HTTPException(404)
     path = transcode.playable_path(row["sha256"], Path(row["source_path"]))
     if path is None:
@@ -115,30 +132,71 @@ def get_audio(file_id: int):
 
 
 @app.post("/api/upload")
-def upload(file: UploadFile):
+def upload(file: UploadFile, request: Request):
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in config.AUDIO_EXTENSIONS:
         raise HTTPException(400, f"unsupported file type: {suffix or '(none)'}")
     dest = config.INPUT_DIR / Path(file.filename).name
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
-    return {"saved": str(dest)}
+    # Register the row now so it belongs to the uploader; the folder scanner
+    # would otherwise pick it up later and assign it to the admin.
+    file_id = db.add_file(pipeline._sha256(dest), dest.name, str(dest),
+                          user_id=request.state.user["id"])
+    return {"saved": str(dest), "id": file_id}
+
+
+@app.get("/api/me")
+def me(request: Request):
+    user = request.state.user
+    return {"id": user["id"], "username": user["username"],
+            "is_admin": bool(user["is_admin"])}
+
+
+@app.get("/api/users")
+def list_users(request: Request):
+    _require_admin(request)
+    return db.list_users()
+
+
+class UserBody(BaseModel):
+    username: str
+
+
+@app.post("/api/users")
+def create_user(body: UserBody, request: Request):
+    _require_admin(request)
+    username = body.username.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{2,30}", username):
+        raise HTTPException(400, "username: 2-30 chars, letters/digits/_.- only")
+    try:
+        return db.create_user(username)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.delete("/api/users/{user_id}")
+def delete_user(user_id: int, request: Request):
+    admin = _require_admin(request)
+    target = next((u for u in db.list_users() if u["id"] == user_id), None)
+    if target is None:
+        raise HTTPException(404)
+    if target["is_admin"]:
+        raise HTTPException(400, "cannot delete an admin account")
+    db.delete_user(user_id, reassign_to=admin["id"])
+    return {"deleted": user_id, "files_reassigned_to": admin["username"]}
 
 
 @app.post("/api/files/{file_id}/rerun")
-def rerun(file_id: int):
-    row = db.get_file(file_id)
-    if row is None:
-        raise HTTPException(404)
+def rerun(file_id: int, request: Request):
+    _fetch_owned(file_id, request)
     db.set_status(file_id, "pending")
     return {"status": "pending"}
 
 
 @app.delete("/api/files/{file_id}")
-def delete_file(file_id: int):
-    row = db.get_file(file_id)
-    if row is None:
-        raise HTTPException(404)
+def delete_file(file_id: int, request: Request):
+    row = _fetch_owned(file_id, request)
     src = Path(row["source_path"])
     if src.exists():
         src.unlink()
@@ -152,9 +210,9 @@ def delete_file(file_id: int):
 
 
 @app.post("/api/files/{file_id}/translate")
-def translate(file_id: int):
+def translate(file_id: int, request: Request):
     """Chinese translation of the summary, generated once and cached in the DB."""
-    row = get_file(file_id)  # reuses the markdown-file fallback for old rows
+    row = get_file(file_id, request)  # reuses the markdown-file fallback for old rows
     if row.get("summary_zh"):
         return {"summary_zh": row["summary_zh"]}
     if not row.get("summary"):
@@ -165,8 +223,9 @@ def translate(file_id: int):
 
 
 @app.get("/api/search")
-def search(q: str = ""):
-    return db.search(q)
+def search(request: Request, q: str = ""):
+    user = request.state.user
+    return db.search(q, None if user["is_admin"] else user["id"])
 
 
 class AskBody(BaseModel):
@@ -174,10 +233,11 @@ class AskBody(BaseModel):
 
 
 @app.post("/api/ask")
-def ask(body: AskBody):
+def ask(body: AskBody, request: Request):
     if not body.question.strip():
         raise HTTPException(400, "empty question")
-    return assistant.ask(body.question)
+    user = request.state.user
+    return assistant.ask(body.question, None if user["is_admin"] else user["id"])
 
 
 @app.get("/api/models")

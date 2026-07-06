@@ -111,7 +111,18 @@ Voice Memos app and share/upload the file instead, or record on the Mac.
 | POST | `/api/upload` | upload an audio file |
 | GET | `/api/search?q=` | full-text search (FTS5) |
 | POST | `/api/ask` | `{"question": …}` → grounded answer + sources |
+| GET | `/api/me` | current user (derived from the API key) |
+| GET/POST | `/api/users` | admin: list / create users (create returns the new key once) |
+| DELETE | `/api/users/{id}` | admin: delete user; their files move to admin |
 | GET | `/api/config` | effective configuration |
+
+## Users
+
+Each user has a username and an API key — the key is the login. On first start
+the configured `AUDIOLOG_API_KEY` becomes the **admin** account, which sees all
+recordings and manages users via the sidebar **Users** panel (or the API).
+Other users see only recordings they uploaded or recorded themselves; search
+and Ask AI are scoped the same way. Watched-folder files belong to the admin.
 
 ## Configuration (env vars)
 

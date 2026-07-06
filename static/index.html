@@ -55,6 +55,15 @@
   }
   nav a.active { background: var(--primary); color: #fff; }
   nav a svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .profile {
+    font-size: 13px; font-weight: 600; color: var(--text-2);
+    padding: 10px 12px; background: var(--bg); border-radius: var(--radius);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .profile .role {
+    font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+    color: #fff; background: var(--primary); padding: 2px 8px; border-radius: 999px;
+  }
   .model-pick { margin-top: auto; padding: 0 4px; }
   .model-pick label {
     display: block; font-size: 11px; font-weight: 600; color: var(--text-3);
@@ -246,6 +255,38 @@
   .ask-sources button:hover { border-color: var(--primary); color: var(--primary); }
   .ask-close { float: right; border: 0; background: none; cursor: pointer; color: var(--text-3); font-size: 14px; }
 
+  /* ── Users admin panel ───────────────────── */
+  #usersModal {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    background: rgba(19, 19, 32, .8); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  #usersModal.open { display: flex; }
+  .users-card {
+    background: var(--card); border-radius: 16px; padding: 24px;
+    width: min(640px, 100%); max-height: 100%; overflow-y: auto; position: relative;
+  }
+  .users-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+  .users-card .ask-close { position: absolute; top: 18px; right: 18px; float: none; }
+  .user-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 0; border-bottom: 1px solid var(--line);
+  }
+  .user-row .uname { font-weight: 600; }
+  .user-row .count { font-size: 12px; color: var(--text-3); }
+  .user-row .ukey {
+    font-family: ui-monospace, monospace; font-size: 11px; color: var(--text-2);
+    background: var(--bg); padding: 3px 8px; border-radius: 6px; user-select: all;
+    overflow-wrap: anywhere;
+  }
+  .user-row button { margin-left: auto; }
+  #addUserForm { display: flex; gap: 8px; margin-top: 16px; }
+  #addUserForm input {
+    flex: 1; font: inherit; font-size: 14px; padding: 9px 14px;
+    border: 1px solid var(--line); border-radius: var(--radius); outline: 0;
+  }
+  #addUserForm input:focus { border-color: var(--primary); }
+
   #dropHint {
     position: fixed; inset: 12px; z-index: 200; display: none;
     border: 2px dashed var(--primary); border-radius: 16px;
@@ -282,7 +323,12 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
       Library
     </a>
+    <a href="#" id="usersNav" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 15.2c2.5.3 4.6 1.9 5.3 4.8"/></svg>
+      Users
+    </a>
   </nav>
+  <div class="profile" id="profile"></div>
   <div class="model-pick">
     <label for="modelSelect">Summary model</label>
     <select id="modelSelect"><option>loading…</option></select>
@@ -345,6 +391,18 @@
       </div>
       <div class="lb-body"><pre id="lbText"></pre></div>
     </div>
+  </div>
+</div>
+
+<div id="usersModal">
+  <div class="users-card">
+    <button class="ask-close" id="usersClose">✕</button>
+    <h3>Users</h3>
+    <div id="usersList"></div>
+    <form id="addUserForm">
+      <input id="newUsername" placeholder="new username" autocomplete="off">
+      <button class="btn" type="submit">Add user</button>
+    </form>
   </div>
 </div>
 
@@ -875,8 +933,76 @@ $("modelSelect").addEventListener("change", async (e) => {
   loadModels();
 });
 
+/* ── Profile + user management ── */
+let me = null;
+
+async function loadMe() {
+  const resp = await fetch("/api/me");
+  if (!resp.ok) return;
+  me = await resp.json();
+  $("profile").innerHTML = `<span>👤</span><span></span>` +
+    (me.is_admin ? `<span class="role">admin</span>` : "");
+  $("profile").children[1].textContent = me.username;
+  if (me.is_admin) $("usersNav").style.display = "flex";
+}
+
+async function loadUsers() {
+  const users = await (await fetch("/api/users")).json();
+  const box = $("usersList");
+  box.innerHTML = "";
+  for (const u of users) {
+    const row = document.createElement("div");
+    row.className = "user-row";
+    row.innerHTML =
+      `<span class="uname"></span>` +
+      (u.is_admin ? `<span class="role" style="font-size:10px;font-weight:700;color:#fff;background:var(--primary);padding:2px 8px;border-radius:999px">ADMIN</span>` : "") +
+      `<span class="count">${u.file_count} recording${u.file_count === 1 ? "" : "s"}</span>` +
+      `<span class="ukey"></span>` +
+      (u.is_admin ? "" : `<button class="btn ghost danger" data-del="${u.id}">Delete</button>`);
+    row.querySelector(".uname").textContent = u.username;
+    row.querySelector(".ukey").textContent = u.api_key;
+    box.appendChild(row);
+  }
+  box.querySelectorAll("button[data-del]").forEach(b =>
+    b.addEventListener("click", async () => {
+      const u = users.find(x => x.id === Number(b.dataset.del));
+      if (!confirm(`Delete user "${u.username}"? Their ${u.file_count} recording(s) move to the admin account.`)) return;
+      const resp = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
+      if (!resp.ok) alert((await resp.json()).detail);
+      loadUsers();
+      refresh();
+    }));
+}
+
+$("usersNav").addEventListener("click", (e) => {
+  e.preventDefault();
+  $("usersModal").classList.add("open");
+  loadUsers();
+});
+$("usersClose").addEventListener("click", () => $("usersModal").classList.remove("open"));
+$("usersModal").addEventListener("click", (e) => {
+  if (e.target === $("usersModal")) $("usersModal").classList.remove("open");
+});
+
+$("addUserForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = $("newUsername").value.trim();
+  if (!username) return;
+  const resp = await fetch("/api/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+  if (!resp.ok) { alert((await resp.json()).detail); return; }
+  const u = await resp.json();
+  $("newUsername").value = "";
+  alert(`User "${u.username}" created.\n\nAPI key (give this to them):\n${u.api_key}`);
+  loadUsers();
+});
+
 loadConfig();
 loadModels();
+loadMe();
 refresh();
 setInterval(refresh, 3000);
 </script>

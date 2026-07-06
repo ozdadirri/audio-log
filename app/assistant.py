@@ -14,8 +14,9 @@ Excerpts:
 Question: {question}"""
 
 
-def ask(question: str) -> dict:
-    hits = db.retrieve(question)
+def ask(question: str, user_id: int | None = None) -> dict:
+    """user_id scopes retrieval to that user's recordings; None = all (admin)."""
+    hits = db.retrieve(question, user_id)
     if not hits:
         return {"answer": "No recordings matched that question.", "sources": []}
     context = "\n\n".join(

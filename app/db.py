@@ -1,13 +1,17 @@
 """SQLite job store. One row per ingested audio file, deduplicated by content hash.
 Transcripts and summaries are stored inline and indexed in an FTS5 table for search."""
 
+import logging
 import re
+import secrets
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config
+
+log = logging.getLogger("audiolog")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS files (
@@ -22,6 +26,14 @@ CREATE TABLE IF NOT EXISTS files (
     output_dir  TEXT,
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    username   TEXT UNIQUE NOT NULL,
+    api_key    TEXT UNIQUE NOT NULL,
+    is_admin   INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
 );
 """
 
@@ -50,6 +62,8 @@ def init():
         for col in ("transcript", "summary", "summary_zh"):
             if col not in cols:
                 conn.execute(f"ALTER TABLE files ADD COLUMN {col} TEXT")
+        if "user_id" not in cols:
+            conn.execute("ALTER TABLE files ADD COLUMN user_id INTEGER")
         conn.execute(
             "CREATE VIRTUAL TABLE IF NOT EXISTS files_fts "
             "USING fts5(filename, transcript, summary)"
@@ -64,6 +78,22 @@ def init():
             (_now(),),
         )
         _backfill(conn)
+        _bootstrap_admin(conn)
+
+
+def _bootstrap_admin(conn):
+    """First run with users enabled: the configured API key becomes the admin
+    account, and all pre-existing files are assigned to it."""
+    if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
+        return
+    key = config.API_KEY or secrets.token_hex(16)
+    cur = conn.execute(
+        "INSERT INTO users (username, api_key, is_admin, created_at) "
+        "VALUES ('admin', ?, 1, ?)", (key, _now()),
+    )
+    conn.execute("UPDATE files SET user_id = ? WHERE user_id IS NULL", (cur.lastrowid,))
+    if not config.API_KEY:
+        log.warning("no AUDIOLOG_API_KEY set — generated admin key: %s", key)
 
 
 def _backfill(conn):
@@ -101,14 +131,15 @@ def _index(conn, file_id: int):
         )
 
 
-def add_file(sha256: str, filename: str, source_path: str) -> int | None:
+def add_file(sha256: str, filename: str, source_path: str,
+             user_id: int | None = None) -> int | None:
     """Insert a new job; returns its id, or None if the hash is already known."""
     with connect() as conn:
         try:
             cur = conn.execute(
-                "INSERT INTO files (sha256, filename, source_path, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (sha256, filename, source_path, _now(), _now()),
+                "INSERT INTO files (sha256, filename, source_path, user_id, "
+                "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (sha256, filename, source_path, user_id, _now(), _now()),
             )
             return cur.lastrowid
         except sqlite3.IntegrityError:
@@ -149,6 +180,52 @@ def set_texts(file_id: int, transcript: str | None, summary: str | None):
         _index(conn, file_id)
 
 
+# ── Users ─────────────────────────────────────────────────────────────────
+
+def get_user_by_key(api_key: str) -> dict | None:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE api_key = ?", (api_key,)).fetchone()
+        return dict(row) if row else None
+
+
+def admin_user_id() -> int:
+    with connect() as conn:
+        return conn.execute(
+            "SELECT id FROM users WHERE is_admin = 1 ORDER BY id LIMIT 1"
+        ).fetchone()[0]
+
+
+def list_users() -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT u.id, u.username, u.api_key, u.is_admin, u.created_at, "
+            "  (SELECT COUNT(*) FROM files f WHERE f.user_id = u.id) AS file_count "
+            "FROM users u ORDER BY u.id"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def create_user(username: str) -> dict:
+    """Create a user with a generated API key; raises ValueError if taken."""
+    key = secrets.token_hex(16)
+    with connect() as conn:
+        try:
+            cur = conn.execute(
+                "INSERT INTO users (username, api_key, is_admin, created_at) "
+                "VALUES (?, ?, 0, ?)", (username, key, _now()),
+            )
+        except sqlite3.IntegrityError:
+            raise ValueError(f"username already exists: {username}")
+        return {"id": cur.lastrowid, "username": username, "api_key": key, "is_admin": 0}
+
+
+def delete_user(user_id: int, reassign_to: int):
+    """Delete a user; their files are reassigned (to the admin)."""
+    with connect() as conn:
+        conn.execute("UPDATE files SET user_id = ? WHERE user_id = ?", (reassign_to, user_id))
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+
 def get_setting(key: str, default: str | None = None) -> str | None:
     with connect() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
@@ -175,32 +252,38 @@ def _fts_query(q: str, any_term: bool = False) -> str:
     return (" OR " if any_term else " ").join(f'"{t}"*' for t in terms)
 
 
-def search(q: str, limit: int = 50) -> list[dict]:
-    """Full-text search over filenames, transcripts, and summaries."""
+def search(q: str, user_id: int | None = None, limit: int = 50) -> list[dict]:
+    """Full-text search over filenames, transcripts, and summaries.
+    user_id scopes results to one owner; None = all files (admin)."""
     match = _fts_query(q)
     if not match:
         return []
+    scope = "AND f.user_id = ? " if user_id is not None else ""
+    args = (match, user_id, limit) if user_id is not None else (match, limit)
     with connect() as conn:
         rows = conn.execute(
-            "SELECT rowid AS id, snippet(files_fts, 1, '<b>', '</b>', ' … ', 16) AS snippet "
-            "FROM files_fts WHERE files_fts MATCH ? ORDER BY rank LIMIT ?",
-            (match, limit),
+            "SELECT fts.rowid AS id, snippet(files_fts, 1, '<b>', '</b>', ' … ', 16) AS snippet "
+            "FROM files_fts fts JOIN files f ON f.id = fts.rowid "
+            f"WHERE files_fts MATCH ? {scope}ORDER BY rank LIMIT ?",
+            args,
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def retrieve(q: str, limit: int = 6) -> list[dict]:
+def retrieve(q: str, user_id: int | None = None, limit: int = 6) -> list[dict]:
     """Looser OR-matched retrieval with large snippets, for the assistant."""
     match = _fts_query(q, any_term=True)
     if not match:
         return []
+    scope = "AND f.user_id = ? " if user_id is not None else ""
+    args = (match, user_id, limit) if user_id is not None else (match, limit)
     with connect() as conn:
         rows = conn.execute(
             "SELECT fts.rowid AS id, f.filename, f.created_at, "
             "  snippet(files_fts, 1, '', '', ' … ', 64) AS excerpt, f.summary "
             "FROM files_fts fts JOIN files f ON f.id = fts.rowid "
-            "WHERE files_fts MATCH ? ORDER BY rank LIMIT ?",
-            (match, limit),
+            f"WHERE files_fts MATCH ? {scope}ORDER BY rank LIMIT ?",
+            args,
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -211,12 +294,15 @@ def delete_file(file_id: int):
         conn.execute("DELETE FROM files_fts WHERE rowid = ?", (file_id,))
 
 
-def list_files() -> list[dict]:
+def list_files(user_id: int | None = None) -> list[dict]:
+    """user_id scopes to one owner; None = all files (admin)."""
+    scope = "WHERE user_id = ? " if user_id is not None else ""
     with connect() as conn:
         rows = conn.execute(
             "SELECT id, sha256, filename, source_path, status, error, language, "
-            "duration, output_dir, created_at, updated_at "
-            "FROM files ORDER BY id DESC"
+            "duration, output_dir, user_id, created_at, updated_at "
+            f"FROM files {scope}ORDER BY id DESC",
+            (user_id,) if user_id is not None else (),
         ).fetchall()
         return [dict(r) for r in rows]
 
