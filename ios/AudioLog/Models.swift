@@ -42,6 +42,7 @@ struct FileDetail: Codable {
     let language: String?
     let duration: Double?
     let tags: String?
+    let memExclude: Int?
     let createdAt: String
     let transcript: String?
     let summary: String?
@@ -50,6 +51,7 @@ struct FileDetail: Codable {
     enum CodingKeys: String, CodingKey {
         case id, filename, title, status, error, language, duration, tags,
              transcript, summary
+        case memExclude = "mem_exclude"
         case createdAt = "created_at"
         case summaryZh = "summary_zh"
     }
@@ -94,6 +96,19 @@ struct AskResponse: Codable {
 struct ChatTurn: Codable {
     let question: String
     let answer: String
+}
+
+struct MemoryStatus: Codable {
+    let content: String?
+    let contentZh: String?
+    let updatedAt: String?
+    let pending: Int
+
+    enum CodingKeys: String, CodingKey {
+        case content, pending
+        case contentZh = "content_zh"
+        case updatedAt = "updated_at"
+    }
 }
 
 struct TranslateResponse: Codable {

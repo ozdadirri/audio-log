@@ -91,6 +91,35 @@ struct APIClient {
         try await get("/api/me")
     }
 
+    static func memoryStatus() async throws -> MemoryStatus {
+        try await get("/api/memory")
+    }
+
+    static func memoryBuild() async throws -> MemoryStatus {
+        try await send("/api/memory/build", method: "POST")
+    }
+
+    static func memoryReset() async throws {
+        struct Reset: Decodable { let reset: Bool }
+        let _: Reset = try await send("/api/memory", method: "DELETE")
+    }
+
+    static func memoryTranslate() async throws -> String {
+        struct Zh: Decodable {
+            let contentZh: String
+            enum CodingKeys: String, CodingKey { case contentZh = "content_zh" }
+        }
+        let zh: Zh = try await send("/api/memory/translate", method: "POST")
+        return zh.contentZh
+    }
+
+    static func setMemExclude(id: Int, exclude: Bool) async throws {
+        struct Result: Decodable { let id: Int }
+        let body = try JSONEncoder().encode(["exclude": exclude])
+        let _: Result = try await send("/api/files/\(id)/mem-exclude", method: "POST",
+                                       body: body, contentType: "application/json")
+    }
+
     static func listUsers() async throws -> [UserAccount] {
         try await get("/api/users")
     }
