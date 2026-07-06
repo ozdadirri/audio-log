@@ -123,6 +123,7 @@ Voice Memos app and share/upload the file instead, or record on the Mac.
 | `AUDIOLOG_OLLAMA_MODEL` | `qwen3.6:27b` | Ollama model for summaries/translation/assistant |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama server |
 | `AUDIOLOG_SCAN_INTERVAL` | `3` | seconds between input dir scans |
+| `AUDIOLOG_API_KEY` | *(empty = auth off)* | require this key on all `/api` requests (`X-API-Key` header, `?key=`, or cookie). The web UI prompts for it; the iOS app has a Settings field. Generate one with `openssl rand -hex 16`. |
 | `AUDIOLOG_DATA_DIR` | `./data` | base dir for db, caches, default input/output |
 
 ## Data layout

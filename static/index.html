@@ -460,9 +460,18 @@ $("bulkDelete").addEventListener("click", async () => {
   refresh();
 });
 
+function promptForKey() {
+  const key = prompt("This server requires an API key:");
+  if (!key) return;
+  document.cookie = `audiolog_key=${encodeURIComponent(key.trim())}; path=/; max-age=31536000; SameSite=Lax`;
+  location.reload();
+}
+
 let lastPayload = "";
 async function refresh() {
-  const payload = await (await fetch("/api/files")).text();
+  const resp = await fetch("/api/files");
+  if (resp.status === 401) { promptForKey(); return; }
+  const payload = await resp.text();
   if (payload !== lastPayload) {  // skip re-render (and thumb re-requests) when nothing changed
     lastPayload = payload;
     files = JSON.parse(payload);
