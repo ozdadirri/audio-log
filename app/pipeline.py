@@ -141,6 +141,12 @@ def _process(job):
         log.exception("title/tag generation failed for %s", source.name)
 
     db.set_texts(file_id, transcript_md, summary_md)
+
+    try:
+        from . import embeddings
+        embeddings.index_file(file_id)
+    except Exception:
+        log.exception("embedding failed for %s", source.name)
     db.set_result(file_id, language=result.get("language"), duration=duration,
                   output_dir=str(out_dir))
     db.set_status(file_id, "done")

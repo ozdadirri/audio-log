@@ -1,7 +1,7 @@
 """AI assistant over the transcript library: FTS5 retrieval picks the most
 relevant excerpts, the Ollama model answers grounded in them."""
 
-from . import db, memory, summarize
+from . import db, embeddings, memory, summarize
 
 ASK_PROMPT = """You are the assistant for a personal library of audio transcripts.
 Answer the user's latest question using the transcript excerpts below and the
@@ -27,7 +27,14 @@ def ask(question: str, user: dict,
     query = question
     if history:
         query = history[-1]["question"] + " " + question
-    hits = db.retrieve(query, user_id)
+    # Semantic retrieval first (matches meaning, not just words); FTS fallback
+    # covers libraries indexed before embeddings existed.
+    try:
+        hits = embeddings.retrieve(query, user_id)
+    except Exception:
+        hits = []
+    if not hits:
+        hits = db.retrieve(query, user_id)
     mem = memory.for_prompt(user["id"])
     if not hits and not mem:
         return {"answer": "No recordings matched that question.", "sources": []}

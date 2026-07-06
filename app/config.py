@@ -35,6 +35,7 @@ WHISPER_MODEL = os.getenv("AUDIOLOG_WHISPER_MODEL", "mlx-community/whisper-large
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("AUDIOLOG_OLLAMA_MODEL", "qwen3.6:27b")
+EMBED_MODEL = os.getenv("AUDIOLOG_EMBED_MODEL", "nomic-embed-text")
 
 # If set, every /api request must carry this key (X-API-Key header, ?key= query
 # param, or audiolog_key cookie). Empty = auth disabled.

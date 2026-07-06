@@ -14,7 +14,8 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import assistant, cleanup, config, db, export, memory, pipeline, thumbnail, transcode
+from . import (assistant, cleanup, config, db, embeddings, export, memory,
+               pipeline, thumbnail, transcode)
 from . import summarize as summarize_mod
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -310,6 +311,16 @@ def backfill_titles(request: Request):
                 db.set_tags(row["id"], tags)
                 tagged += 1
     return {"titled": titled, "tagged": tagged}
+
+
+@app.post("/api/backfill-embeddings")
+def backfill_embeddings(request: Request):
+    """Admin: build the vector index for recordings that lack one."""
+    _require_admin(request)
+    ids = db.files_missing_embeddings()
+    for file_id in ids:
+        embeddings.index_file(file_id)
+    return {"embedded": len(ids)}
 
 
 @app.get("/api/search")
