@@ -7,13 +7,32 @@ import logging
 import re
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import config, db, summarize, transcribe
+from . import cleanup, config, db, summarize, transcribe
 
 log = logging.getLogger("audiolog")
 
 stop_event = threading.Event()
+
+TRASH_RETENTION_DAYS = 30
+_last_purge = 0.0
+
+
+def _purge_trash():
+    """Hard-delete trash older than the retention window; runs ~hourly."""
+    global _last_purge
+    if time.monotonic() - _last_purge < 3600 and _last_purge:
+        return
+    _last_purge = time.monotonic()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=TRASH_RETENTION_DAYS)) \
+        .isoformat(timespec="seconds")
+    for row in db.trash_older_than(cutoff):
+        try:
+            cleanup.hard_delete(row)
+        except Exception:
+            log.exception("trash purge failed for id=%s", row["id"])
 
 # path -> size at last scan; a file is ingested once its size is stable across
 # two scans, so half-copied files (cloud sync, large uploads) are not picked up early.
@@ -32,6 +51,7 @@ def ingest_loop():
     while not stop_event.is_set():
         try:
             _scan_once()
+            _purge_trash()
         except Exception:
             log.exception("ingest scan failed")
         stop_event.wait(config.SCAN_INTERVAL)

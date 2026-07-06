@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import assistant, config, db, export, memory, pipeline, thumbnail, transcode
+from . import assistant, cleanup, config, db, export, memory, pipeline, thumbnail, transcode
 from . import summarize as summarize_mod
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -147,7 +147,14 @@ def upload(file: UploadFile, request: Request):
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in config.AUDIO_EXTENSIONS:
         raise HTTPException(400, f"unsupported file type: {suffix or '(none)'}")
-    dest = config.INPUT_DIR / Path(file.filename).name
+    # Never overwrite an existing file: a same-named upload with different
+    # content would corrupt the older recording's source.
+    base = Path(file.filename).name
+    dest = config.INPUT_DIR / base
+    counter = 1
+    while dest.exists():
+        dest = config.INPUT_DIR / f"{Path(base).stem}-{counter}{Path(base).suffix}"
+        counter += 1
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
     # Register the row now so it belongs to the uploader; the folder scanner
@@ -244,17 +251,28 @@ def rerun(file_id: int, request: Request):
 
 @app.delete("/api/files/{file_id}")
 def delete_file(file_id: int, request: Request):
+    """First delete moves to trash; deleting a trashed file removes it forever."""
     row = _fetch_owned(file_id, request)
-    src = Path(row["source_path"])
-    if src.exists():
-        src.unlink()
-    if row["output_dir"]:
-        shutil.rmtree(row["output_dir"], ignore_errors=True)
-    for p in thumbnail.THUMB_DIR.glob(f"{row['sha256']}*.png"):
-        p.unlink(missing_ok=True)
-    (transcode.CACHE_DIR / f"{row['sha256']}.m4a").unlink(missing_ok=True)
-    db.delete_file(file_id)
-    return {"deleted": file_id}
+    if row.get("deleted_at"):
+        cleanup.hard_delete(row)
+        return {"deleted": file_id, "permanent": True}
+    db.soft_delete_file(file_id)
+    return {"deleted": file_id, "permanent": False}
+
+
+@app.post("/api/files/{file_id}/restore")
+def restore_file(file_id: int, request: Request):
+    row = _fetch_owned(file_id, request)
+    if not row.get("deleted_at"):
+        raise HTTPException(400, "not in trash")
+    db.restore_file(file_id)
+    return {"restored": file_id}
+
+
+@app.get("/api/trash")
+def list_trash(request: Request):
+    user = request.state.user
+    return db.list_trash(None if user["is_admin"] else user["id"])
 
 
 @app.post("/api/files/{file_id}/translate")

@@ -74,6 +74,8 @@ def init():
             conn.execute("ALTER TABLE files ADD COLUMN user_id INTEGER")
         if "mem_exclude" not in cols:
             conn.execute("ALTER TABLE files ADD COLUMN mem_exclude INTEGER NOT NULL DEFAULT 0")
+        if "deleted_at" not in cols:
+            conn.execute("ALTER TABLE files ADD COLUMN deleted_at TEXT")
         mem_cols = {r[1] for r in conn.execute("PRAGMA table_info(memories)")}
         if mem_cols and "content_zh" not in mem_cols:
             conn.execute("ALTER TABLE memories ADD COLUMN content_zh TEXT")
@@ -125,7 +127,8 @@ def _backfill(conn):
              s.read_text() if s.exists() else None, r["id"]),
         )
     missing = conn.execute(
-        "SELECT id FROM files WHERE id NOT IN (SELECT rowid FROM files_fts)"
+        "SELECT id FROM files WHERE id NOT IN (SELECT rowid FROM files_fts) "
+        "AND deleted_at IS NULL"
     ).fetchall()
     for r in missing:
         _index(conn, r["id"])
@@ -162,7 +165,8 @@ def add_file(sha256: str, filename: str, source_path: str,
 def next_pending() -> sqlite3.Row | None:
     with connect() as conn:
         return conn.execute(
-            "SELECT * FROM files WHERE status = 'pending' ORDER BY id LIMIT 1"
+            "SELECT * FROM files WHERE status = 'pending' AND deleted_at IS NULL "
+            "ORDER BY id LIMIT 1"
         ).fetchone()
 
 
@@ -218,7 +222,8 @@ def list_users() -> list[dict]:
     with connect() as conn:
         rows = conn.execute(
             "SELECT u.id, u.username, u.api_key, u.is_admin, u.created_at, "
-            "  (SELECT COUNT(*) FROM files f WHERE f.user_id = u.id) AS file_count "
+            "  (SELECT COUNT(*) FROM files f WHERE f.user_id = u.id "
+            "   AND f.deleted_at IS NULL) AS file_count "
             "FROM users u ORDER BY u.id"
         ).fetchall()
         return [dict(r) for r in rows]
@@ -285,7 +290,7 @@ def memory_pending(user: dict, last_file_id: int) -> list[dict]:
         rows = conn.execute(
             "SELECT id, filename, title, created_at, summary FROM files "
             "WHERE status = 'done' AND summary IS NOT NULL AND id > ? "
-            "AND COALESCE(mem_exclude, 0) = 0 "
+            "AND COALESCE(mem_exclude, 0) = 0 AND deleted_at IS NULL "
             f"{scope}ORDER BY id",
             args,
         ).fetchall()
@@ -341,7 +346,7 @@ def search(q: str, user_id: int | None = None, limit: int = 50) -> list[dict]:
     match = _fts_query(q)
     if not match:
         return []
-    scope = "AND f.user_id = ? " if user_id is not None else ""
+    scope = "AND f.deleted_at IS NULL " + ("AND f.user_id = ? " if user_id is not None else "")
     args = (match, user_id, limit) if user_id is not None else (match, limit)
     with connect() as conn:
         rows = conn.execute(
@@ -358,7 +363,7 @@ def retrieve(q: str, user_id: int | None = None, limit: int = 6) -> list[dict]:
     match = _fts_query(q, any_term=True)
     if not match:
         return []
-    scope = "AND f.user_id = ? " if user_id is not None else ""
+    scope = "AND f.deleted_at IS NULL " + ("AND f.user_id = ? " if user_id is not None else "")
     args = (match, user_id, limit) if user_id is not None else (match, limit)
     with connect() as conn:
         rows = conn.execute(
@@ -377,9 +382,45 @@ def delete_file(file_id: int):
         conn.execute("DELETE FROM files_fts WHERE rowid = ?", (file_id,))
 
 
+def soft_delete_file(file_id: int):
+    """Move to trash: hidden from every list/search until restored or purged."""
+    with connect() as conn:
+        conn.execute("UPDATE files SET deleted_at = ?, updated_at = ? WHERE id = ?",
+                     (_now(), _now(), file_id))
+        conn.execute("DELETE FROM files_fts WHERE rowid = ?", (file_id,))
+
+
+def restore_file(file_id: int):
+    with connect() as conn:
+        conn.execute("UPDATE files SET deleted_at = NULL, updated_at = ? WHERE id = ?",
+                     (_now(), file_id))
+        _index(conn, file_id)
+
+
+def list_trash(user_id: int | None = None) -> list[dict]:
+    scope = "AND f.user_id = ? " if user_id is not None else ""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT f.id, f.filename, f.title, f.duration, f.deleted_at, f.created_at, "
+            "u.username AS owner FROM files f LEFT JOIN users u ON u.id = f.user_id "
+            f"WHERE f.deleted_at IS NOT NULL {scope}ORDER BY f.deleted_at DESC",
+            (user_id,) if user_id is not None else (),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def trash_older_than(cutoff_iso: str) -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM files WHERE deleted_at IS NOT NULL AND deleted_at < ?",
+            (cutoff_iso,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def list_files(user_id: int | None = None) -> list[dict]:
-    """user_id scopes to one owner; None = all files (admin)."""
-    scope = "WHERE f.user_id = ? " if user_id is not None else ""
+    """user_id scopes to one owner; None = all files (admin). Trash excluded."""
+    scope = "WHERE f.deleted_at IS NULL " + ("AND f.user_id = ? " if user_id is not None else "")
     with connect() as conn:
         rows = conn.execute(
             "SELECT f.id, f.sha256, f.filename, f.title, f.tags, f.source_path, "
