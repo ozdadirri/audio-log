@@ -26,8 +26,9 @@ struct ProfileView: View {
                          "enter a different user's key there.")
                 }
 
-                if me?.isAdmin == true {
-                    Section {
+                Section {
+                    NavigationLink("Trash") { TrashView() }
+                    if me?.isAdmin == true {
                         NavigationLink("Manage users") { UsersView() }
                     }
                 }
@@ -37,6 +38,63 @@ struct ProfileView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button("Close") { dismiss() } }
             }
+        }
+    }
+}
+
+struct TrashView: View {
+    @State private var items: [TrashItem] = []
+    @State private var errorMessage: String?
+
+    var body: some View {
+        List {
+            if let errorMessage {
+                Text(errorMessage).font(.footnote).foregroundStyle(.red)
+            }
+            if items.isEmpty {
+                Text("Trash is empty. Deleted recordings stay here for 30 days.")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(items) { item in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.displayName).bold()
+                    Text("deleted \(item.deletedAt.prefix(19).replacingOccurrences(of: "T", with: " "))"
+                         + (item.owner.map { " · \($0)" } ?? ""))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .swipeActions(edge: .leading) {
+                    Button("Restore") { restore(item) }.tint(.blue)
+                }
+                .swipeActions(edge: .trailing) {
+                    Button("Delete forever", role: .destructive) { deleteForever(item) }
+                }
+            }
+        }
+        .navigationTitle("Trash")
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func load() async {
+        do {
+            items = try await APIClient.listTrash()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func restore(_ item: TrashItem) {
+        Task {
+            do { try await APIClient.restore(id: item.id); await load() }
+            catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func deleteForever(_ item: TrashItem) {
+        Task {
+            do { try await APIClient.delete(id: item.id); await load() }
+            catch { errorMessage = error.localizedDescription }
         }
     }
 }

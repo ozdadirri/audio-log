@@ -113,6 +113,15 @@ struct APIClient {
         return zh.contentZh
     }
 
+    static func listTrash() async throws -> [TrashItem] {
+        try await get("/api/trash")
+    }
+
+    static func restore(id: Int) async throws {
+        struct Restored: Decodable { let restored: Int }
+        let _: Restored = try await send("/api/files/\(id)/restore", method: "POST")
+    }
+
     static func setMemExclude(id: Int, exclude: Bool) async throws {
         struct Result: Decodable { let id: Int }
         let body = try JSONEncoder().encode(["exclude": exclude])
