@@ -98,6 +98,21 @@ struct ChatTurn: Codable {
     let answer: String
 }
 
+struct TrashItem: Codable, Identifiable {
+    let id: Int
+    let filename: String
+    let title: String?
+    let deletedAt: String
+    let owner: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, filename, title, owner
+        case deletedAt = "deleted_at"
+    }
+
+    var displayName: String { title?.isEmpty == false ? title! : filename }
+}
+
 struct MemoryStatus: Codable {
     let content: String?
     let contentZh: String?

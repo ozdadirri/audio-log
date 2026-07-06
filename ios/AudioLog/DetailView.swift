@@ -88,9 +88,9 @@ struct DetailView: View {
                 }
             }
         }
-        .confirmationDialog("Delete this recording and its transcript and summary?",
+        .confirmationDialog("Move this recording to trash? Restore it from Profile > Trash within 30 days.",
                             isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
+            Button("Move to Trash", role: .destructive) {
                 Task {
                     try? await APIClient.delete(id: fileID)
                     dismiss()
