@@ -38,7 +38,12 @@ def ingest_loop():
 
 
 def _scan_once():
-    for path in sorted(config.INPUT_DIR.rglob("*")):
+    for input_dir in [config.INPUT_DIR, *config.EXTRA_INPUT_DIRS]:
+        _scan_dir(input_dir)
+
+
+def _scan_dir(input_dir: Path):
+    for path in sorted(input_dir.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in config.AUDIO_EXTENSIONS:
             continue
         size = path.stat().st_size
@@ -120,6 +125,14 @@ def _process(job):
                   output_dir=str(out_dir))
     db.set_status(file_id, "done")
     log.info("done %s -> %s", source.name, out_dir)
+
+    if config.PUBLISH_DIR:
+        try:
+            import shutil
+            shutil.copytree(out_dir, config.PUBLISH_DIR / out_dir.name, dirs_exist_ok=True)
+            log.info("published %s to %s", out_dir.name, config.PUBLISH_DIR)
+        except Exception:
+            log.exception("publish failed for %s", out_dir.name)
 
 
 def start_background_threads() -> list[threading.Thread]:

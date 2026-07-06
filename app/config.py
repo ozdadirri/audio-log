@@ -21,6 +21,14 @@ INPUT_DIR = Path(os.getenv("AUDIOLOG_INPUT_DIR", DATA_DIR / "input"))
 # Results are written here (point at a Drive-synced folder to sync results back).
 OUTPUT_DIR = Path(os.getenv("AUDIOLOG_OUTPUT_DIR", DATA_DIR / "output"))
 
+# Extra watched folders, comma-separated (e.g. a Google Drive-synced dir).
+EXTRA_INPUT_DIRS = [Path(p.strip()) for p in
+                    os.getenv("AUDIOLOG_EXTRA_INPUT_DIRS", "").split(",") if p.strip()]
+
+# If set, each finished job's outputs (transcript.md, summary.md, meta.json)
+# are mirrored here — point it at a Drive-synced folder to publish digests.
+PUBLISH_DIR = Path(os.getenv("AUDIOLOG_PUBLISH_DIR")) if os.getenv("AUDIOLOG_PUBLISH_DIR") else None
+
 DB_PATH = Path(os.getenv("AUDIOLOG_DB", DATA_DIR / "audiolog.db"))
 
 WHISPER_MODEL = os.getenv("AUDIOLOG_WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo")
@@ -40,5 +48,6 @@ AUDIO_EXTENSIONS = {
     ".aiff", ".aif", ".wma", ".amr", ".mp4", ".webm", ".mov",
 }
 
-for _dir in (DATA_DIR, INPUT_DIR, OUTPUT_DIR):
+for _dir in (DATA_DIR, INPUT_DIR, OUTPUT_DIR, *EXTRA_INPUT_DIRS,
+              *([PUBLISH_DIR] if PUBLISH_DIR else [])):
     _dir.mkdir(parents=True, exist_ok=True)
