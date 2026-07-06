@@ -75,6 +75,13 @@ struct DetailView: View {
                 }
                 Menu {
                     Button("Re-run processing") { Task { try? await APIClient.rerun(id: fileID) } }
+                    Button(detail?.memExclude == 1 ? "Include in memory" : "Exclude from memory") {
+                        Task {
+                            try? await APIClient.setMemExclude(
+                                id: fileID, exclude: detail?.memExclude != 1)
+                            await load()
+                        }
+                    }
                     Button("Delete", role: .destructive) { confirmDelete = true }
                 } label: {
                     Image(systemName: "ellipsis.circle")

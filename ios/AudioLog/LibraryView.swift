@@ -13,6 +13,7 @@ struct LibraryView: View {
     @State private var adminUsers: [UserAccount] = []
     @State private var ownerFilter: String?
     @State private var showProfile = false
+    @State private var showMemory = false
 
     private var shown: [RecordingFile] {
         files.filter { file in
@@ -80,9 +81,12 @@ struct LibraryView: View {
             .searchable(text: $searchText, prompt: "Filter recordings")
             .refreshable { await load() }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItemGroup(placement: .topBarLeading) {
                     Button { showProfile = true } label: {
                         Image(systemName: me?.isAdmin == true ? "person.circle.fill" : "person.circle")
+                    }
+                    Button { showMemory = true } label: {
+                        Image(systemName: "brain")
                     }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -111,6 +115,7 @@ struct LibraryView: View {
                 SettingsView()
             }
             .sheet(isPresented: $showProfile) { ProfileView(me: me) }
+            .sheet(isPresented: $showMemory) { MemoryView() }
             .sheet(isPresented: $showAsk) { AskView() }
             .sheet(isPresented: $showRecorder, onDismiss: { Task { await load() } }) {
                 RecordView()
@@ -182,6 +187,16 @@ struct TileView: View {
     var showOwner = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            thumbnail
+            Text(file.displayName)
+                .font(.caption2).foregroundStyle(.secondary)
+                .lineLimit(2, reservesSpace: true)
+                .multilineTextAlignment(.leading)
+        }
+    }
+
+    private var thumbnail: some View {
         AsyncImage(url: APIClient.thumbURL(for: file)) { image in
             image.resizable().aspectRatio(contentMode: .fill)
         } placeholder: {
@@ -199,24 +214,23 @@ struct TileView: View {
                     .padding(6)
             }
         }
-        .overlay(alignment: .bottomLeading) {
-            if !file.isDone {
-                Text(file.status)
-                    .font(.caption2.bold()).foregroundStyle(.white)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(file.status == "error" ? .red : .orange, in: Capsule())
-                    .padding(6)
+        .overlay(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 4) {
+                if showOwner, let owner = file.owner {
+                    Text(owner)
+                        .font(.caption2.bold()).foregroundStyle(.white)
+                        .lineLimit(1)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(.black.opacity(0.55), in: Capsule())
+                }
+                if !file.isDone {
+                    Text(file.status)
+                        .font(.caption2.bold()).foregroundStyle(.white)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(file.status == "error" ? .red : .orange, in: Capsule())
+                }
             }
-        }
-        .overlay(alignment: .bottomTrailing) {
-            if showOwner, let owner = file.owner {
-                Text(owner)
-                    .font(.caption2.bold()).foregroundStyle(.white)
-                    .lineLimit(1)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(.black.opacity(0.55), in: Capsule())
-                    .padding(6)
-            }
+            .padding(6)
         }
     }
 }
