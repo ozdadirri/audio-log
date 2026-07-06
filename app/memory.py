@@ -13,8 +13,11 @@ MEMORY_PROMPT = """You maintain the long-term memory document for a user's audio
 recording library. Fold the new recording digests below into the existing memory.
 
 Rules:
-- Keep exactly these sections: ## People, ## Projects & work, ## Decisions,
-  ## Recurring themes, ## Timeline highlights.
+- Keep exactly these sections: ## Overview, ## Projects & topics,
+  ## Decisions & actions, ## Recurring themes, ## Timeline highlights.
+- Write about the user's own activities, topics, plans, and commitments.
+  Do NOT keep profiles of other people; mention someone else only inside an
+  action item or decision where they are essential.
 - Merge with what is already there — update facts, don't duplicate them.
 - Prefix timeline entries with their date (YYYY-MM-DD).
 - Keep the whole document under about 800 words; drop the least important
@@ -35,9 +38,22 @@ def status(user: dict) -> dict:
     pending = db.memory_pending(user, row["last_file_id"] if row else 0)
     return {
         "content": row["content"] if row else None,
+        "content_zh": row.get("content_zh") if row else None,
         "updated_at": row["updated_at"] if row else None,
         "pending": len(pending),
     }
+
+
+def translate(user: dict) -> str | None:
+    """Chinese version of the memory, generated once per build and cached."""
+    row = db.get_memory(user["id"])
+    if not row or not row["content"]:
+        return None
+    if row.get("content_zh"):
+        return row["content_zh"]
+    zh = summarize.translate_zh(row["content"])
+    db.set_memory_zh(user["id"], zh)
+    return zh
 
 
 def build(user: dict) -> dict:
