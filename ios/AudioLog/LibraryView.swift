@@ -106,8 +106,14 @@ struct LibraryView: View {
                         }
                     }
                     Button { showAsk = true } label: { Image(systemName: "sparkles") }
-                    Button { showRecorder = true } label: { Image(systemName: "mic.circle") }
-                    Button { showImporter = true } label: { Image(systemName: "square.and.arrow.up") }
+                    Menu {
+                        Button { showRecorder = true } label: {
+                            Label("Record", systemImage: "mic")
+                        }
+                        Button { showImporter = true } label: {
+                            Label("Import audio", systemImage: "square.and.arrow.down")
+                        }
+                    } label: { Image(systemName: "plus.circle") }
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
                 }
             }
