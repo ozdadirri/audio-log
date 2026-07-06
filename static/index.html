@@ -290,12 +290,12 @@
   .ask-close { float: right; border: 0; background: none; cursor: pointer; color: var(--text-3); font-size: 14px; }
 
   /* ── Users admin panel + profile modal ───── */
-  #usersModal, #profileModal, #memoryModal {
+  #usersModal, #profileModal, #memoryModal, #trashModal {
     position: fixed; inset: 0; z-index: 100; display: none;
     background: rgba(19, 19, 32, .8); backdrop-filter: blur(4px);
     align-items: center; justify-content: center; padding: 24px;
   }
-  #usersModal.open, #profileModal.open, #memoryModal.open { display: flex; }
+  #usersModal.open, #profileModal.open, #memoryModal.open, #trashModal.open { display: flex; }
   .users-card {
     background: var(--card); border-radius: 16px; padding: 24px;
     width: min(640px, 100%); max-height: 100%; overflow-y: auto; position: relative;
@@ -445,6 +445,7 @@
     <div class="profile" id="profileInfo" style="margin-bottom:16px">(not signed in)</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn ghost" id="switchProfileBtn">Switch profile…</button>
+      <button class="btn ghost" id="trashBtn">Trash</button>
       <button class="btn" id="manageUsersBtn" style="display:none">Manage users</button>
     </div>
   </div>
@@ -461,6 +462,16 @@
       <button class="btn ghost danger" id="memoryReset">Reset</button>
     </div>
     <div class="md" id="memoryContent"></div>
+  </div>
+</div>
+
+<div id="trashModal">
+  <div class="users-card">
+    <button class="ask-close" id="trashClose">✕</button>
+    <h3>Trash</h3>
+    <div style="font-size:12px;color:var(--text-3);margin-bottom:12px">
+      Items are permanently deleted after 30 days.</div>
+    <div id="trashList"></div>
   </div>
 </div>
 
@@ -624,7 +635,7 @@ function updateBulkUI() {
 
 $("bulkDelete").addEventListener("click", async () => {
   const n = selected.size;
-  if (!n || !confirm(`Delete ${n} recording${n > 1 ? "s" : ""} and their transcripts, summaries, and output files? This cannot be undone.`)) return;
+  if (!n || !confirm(`Move ${n} recording${n > 1 ? "s" : ""} to trash? You can restore them from Profile → Trash for 30 days.`)) return;
   $("bulkDelete").disabled = true;
   for (const id of [...selected]) {
     const resp = await fetch(`/api/files/${id}`, { method: "DELETE" });
@@ -880,7 +891,7 @@ $("lbMemX").addEventListener("click", async () => {
 
 $("lbDelete").addEventListener("click", async () => {
   const f = files.find(f => f.id === openId);
-  if (!confirm(`Delete "${f?.filename ?? "this recording"}" and its transcript, summary, and output files? This cannot be undone.`)) return;
+  if (!confirm(`Move "${f?.title || f?.filename || "this recording"}" to trash? You can restore it from Profile → Trash for 30 days.`)) return;
   const resp = await fetch(`/api/files/${openId}`, { method: "DELETE" });
   if (!resp.ok) {
     $("lbStatus").textContent = "delete failed: " + (await resp.json()).detail;
@@ -1229,6 +1240,48 @@ $("addUserForm").addEventListener("submit", async (e) => {
   alert(`User "${u.username}" created.\n\nAPI key (give this to them):\n${u.api_key}`);
   loadUsers();
   loadOwnerChips();
+});
+
+/* ── Trash ── */
+async function loadTrash() {
+  const items = await (await fetch("/api/trash")).json();
+  const box = $("trashList");
+  box.innerHTML = items.length ? "" :
+    `<p style="color:var(--text-3);font-size:14px">Trash is empty.</p>`;
+  for (const t of items) {
+    const row = document.createElement("div");
+    row.className = "user-row";
+    row.innerHTML =
+      `<span class="uname"></span>` +
+      `<span class="count">deleted ${new Date(t.deleted_at).toLocaleString()}` +
+      (me?.is_admin && t.owner ? ` · ${t.owner}` : "") + `</span>` +
+      `<span style="margin-left:auto;display:flex;gap:8px">` +
+      `<button class="btn ghost" data-restore="${t.id}">Restore</button>` +
+      `<button class="btn ghost danger" data-forever="${t.id}">Delete forever</button></span>`;
+    row.querySelector(".uname").textContent = t.title || t.filename;
+    box.appendChild(row);
+  }
+  box.querySelectorAll("[data-restore]").forEach(b =>
+    b.addEventListener("click", async () => {
+      await fetch(`/api/files/${b.dataset.restore}/restore`, { method: "POST" });
+      loadTrash(); refresh();
+    }));
+  box.querySelectorAll("[data-forever]").forEach(b =>
+    b.addEventListener("click", async () => {
+      if (!confirm("Permanently delete? This cannot be undone.")) return;
+      await fetch(`/api/files/${b.dataset.forever}`, { method: "DELETE" });
+      loadTrash();
+    }));
+}
+
+$("trashBtn").addEventListener("click", () => {
+  $("profileModal").classList.remove("open");
+  $("trashModal").classList.add("open");
+  loadTrash();
+});
+$("trashClose").addEventListener("click", () => $("trashModal").classList.remove("open"));
+$("trashModal").addEventListener("click", (e) => {
+  if (e.target === $("trashModal")) $("trashModal").classList.remove("open");
 });
 
 /* ── Memory ── */
