@@ -87,6 +87,25 @@ struct APIClient {
         try await get("/api/files")
     }
 
+    static func me() async throws -> Me {
+        try await get("/api/me")
+    }
+
+    static func listUsers() async throws -> [UserAccount] {
+        try await get("/api/users")
+    }
+
+    static func createUser(username: String) async throws -> UserAccount {
+        let body = try JSONEncoder().encode(["username": username])
+        return try await send("/api/users", method: "POST", body: body,
+                              contentType: "application/json")
+    }
+
+    static func deleteUser(id: Int) async throws {
+        struct Deleted: Decodable { let deleted: Int }
+        let _: Deleted = try await send("/api/users/\(id)", method: "DELETE")
+    }
+
     static func detail(id: Int) async throws -> FileDetail {
         try await get("/api/files/\(id)")
     }

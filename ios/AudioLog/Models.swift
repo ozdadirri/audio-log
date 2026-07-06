@@ -7,11 +7,12 @@ struct RecordingFile: Identifiable, Codable, Equatable {
     let error: String?
     let language: String?
     let duration: Double?
+    let owner: String?
     let createdAt: String
     let updatedAt: String
 
     enum CodingKeys: String, CodingKey {
-        case id, filename, status, error, language, duration
+        case id, filename, status, error, language, duration, owner
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -83,4 +84,29 @@ struct AskResponse: Codable {
 struct TranslateResponse: Codable {
     let summaryZh: String
     enum CodingKeys: String, CodingKey { case summaryZh = "summary_zh" }
+}
+
+struct Me: Codable {
+    let id: Int
+    let username: String
+    let isAdmin: Bool
+    enum CodingKeys: String, CodingKey {
+        case id, username
+        case isAdmin = "is_admin"
+    }
+}
+
+struct UserAccount: Codable, Identifiable {
+    let id: Int
+    let username: String
+    let apiKey: String
+    let isAdmin: Int
+    let fileCount: Int?   // absent in the create-user response
+
+    enum CodingKeys: String, CodingKey {
+        case id, username
+        case apiKey = "api_key"
+        case isAdmin = "is_admin"
+        case fileCount = "file_count"
+    }
 }

@@ -55,6 +55,15 @@
   }
   nav a.active { background: var(--primary); color: #fff; }
   nav a svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .profile {
+    font-size: 13px; font-weight: 600; color: var(--text-2);
+    padding: 10px 12px; background: var(--bg); border-radius: var(--radius);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .profile .role {
+    font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+    color: #fff; background: var(--primary); padding: 2px 8px; border-radius: 999px;
+  }
   .model-pick { margin-top: auto; padding: 0 4px; }
   .model-pick label {
     display: block; font-size: 11px; font-weight: 600; color: var(--text-3);
@@ -155,6 +164,12 @@
   }
   .badge.pending, .badge.transcribing, .badge.summarizing { background: var(--warn); }
   .badge.error { background: var(--danger); }
+  .tile .owner {
+    position: absolute; right: 8px; bottom: 8px;
+    background: rgba(0,0,0,.55); color: #fff; font-size: 10px; font-weight: 600;
+    padding: 2px 8px; border-radius: 999px; max-width: 45%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .empty { color: var(--text-3); font-size: 14px; padding: 48px 0; text-align: center; }
 
   /* ── Lightbox ────────────────────────────── */
@@ -224,6 +239,15 @@
     width: 38px; height: 38px; border-radius: 50%;
     background: rgba(255,255,255,.12); color: #fff; font-size: 17px;
   }
+  /* ── Owner filter chips (admin) ──────────── */
+  #ownerChips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  #ownerChips button {
+    border: 1px solid var(--line); background: var(--card); cursor: pointer;
+    font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-2);
+    padding: 6px 14px; border-radius: 999px;
+  }
+  #ownerChips button.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
   /* ── Ask AI panel ────────────────────────── */
   .ask-card {
     background: var(--card); border: 1px solid var(--line); border-radius: 14px;
@@ -245,6 +269,38 @@
   }
   .ask-sources button:hover { border-color: var(--primary); color: var(--primary); }
   .ask-close { float: right; border: 0; background: none; cursor: pointer; color: var(--text-3); font-size: 14px; }
+
+  /* ── Users admin panel + profile modal ───── */
+  #usersModal, #profileModal {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    background: rgba(19, 19, 32, .8); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  #usersModal.open, #profileModal.open { display: flex; }
+  .users-card {
+    background: var(--card); border-radius: 16px; padding: 24px;
+    width: min(640px, 100%); max-height: 100%; overflow-y: auto; position: relative;
+  }
+  .users-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+  .users-card .ask-close { position: absolute; top: 18px; right: 18px; float: none; }
+  .user-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 0; border-bottom: 1px solid var(--line);
+  }
+  .user-row .uname { font-weight: 600; }
+  .user-row .count { font-size: 12px; color: var(--text-3); }
+  .user-row .ukey {
+    font-family: ui-monospace, monospace; font-size: 11px; color: var(--text-2);
+    background: var(--bg); padding: 3px 8px; border-radius: 6px; user-select: all;
+    overflow-wrap: anywhere;
+  }
+  .user-row button { margin-left: auto; }
+  #addUserForm { display: flex; gap: 8px; margin-top: 16px; }
+  #addUserForm input {
+    flex: 1; font: inherit; font-size: 14px; padding: 9px 14px;
+    border: 1px solid var(--line); border-radius: var(--radius); outline: 0;
+  }
+  #addUserForm input:focus { border-color: var(--primary); }
 
   #dropHint {
     position: fixed; inset: 12px; z-index: 200; display: none;
@@ -282,7 +338,12 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
       Library
     </a>
+    <a href="#" id="usersNav" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 15.2c2.5.3 4.6 1.9 5.3 4.8"/></svg>
+      Users
+    </a>
   </nav>
+  <div class="profile" id="profile"></div>
   <div class="model-pick">
     <label for="modelSelect">Summary model</label>
     <select id="modelSelect"><option>loading…</option></select>
@@ -296,6 +357,7 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <input id="searchInput" type="search" placeholder="Search transcripts — press Enter to ask AI…">
     </div>
+    <button class="btn ghost" id="profileBtn" title="Profile">👤</button>
     <span id="busyNote" style="display:none;font-size:12px;color:var(--warn);font-weight:600">
       ⚙ processing — playback may stutter while the AI models run</span>
     <span id="uploadMsg"></span>
@@ -315,6 +377,7 @@
   </header>
 
   <div class="content">
+    <div id="ownerChips" style="display:none"></div>
     <div id="askPanel"></div>
     <div id="content"></div>
   </div>
@@ -345,6 +408,30 @@
       </div>
       <div class="lb-body"><pre id="lbText"></pre></div>
     </div>
+  </div>
+</div>
+
+<div id="profileModal">
+  <div class="users-card">
+    <button class="ask-close" id="profileClose">✕</button>
+    <h3>Profile</h3>
+    <div class="profile" id="profileInfo" style="margin-bottom:16px">(not signed in)</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn ghost" id="switchProfileBtn">Switch profile…</button>
+      <button class="btn" id="manageUsersBtn" style="display:none">Manage users</button>
+    </div>
+  </div>
+</div>
+
+<div id="usersModal">
+  <div class="users-card">
+    <button class="ask-close" id="usersClose">✕</button>
+    <h3>Users</h3>
+    <div id="usersList"></div>
+    <form id="addUserForm">
+      <input id="newUsername" placeholder="new username" autocomplete="off">
+      <button class="btn" type="submit">Add user</button>
+    </form>
   </div>
 </div>
 
@@ -384,7 +471,8 @@ async function loadConfig() {
 
 function render() {
   const shown = files.filter(f =>
-    !query || f.filename.toLowerCase().includes(query) || (matchIds && matchIds.has(f.id)));
+    (!ownerFilter || f.owner === ownerFilter) &&
+    (!query || f.filename.toLowerCase().includes(query) || (matchIds && matchIds.has(f.id))));
   const content = $("content");
   if (!shown.length) {
     content.innerHTML = `<div class="empty">${files.length ? "No matches." :
@@ -423,7 +511,10 @@ function tile(f) {
     `<div class="placeholder">…</div>` +
     `<img loading="lazy" src="${thumbUrl(f)}" alt=""` +
     ` onload="this.previousElementSibling.remove()" onerror="this.remove()">` +
-    `<span class="check">✓</span>` + badge + dur + `<div class="overlay">${f.filename}</div>`;
+    `<span class="check">✓</span>` + badge + dur +
+    (me?.is_admin && f.owner ? `<span class="owner"></span>` : "") +
+    `<div class="overlay">${f.filename}</div>`;
+  if (me?.is_admin && f.owner) el.querySelector(".owner").textContent = f.owner;
   const toggle = () => {
     selected.has(f.id) ? selected.delete(f.id) : selected.add(f.id);
     el.classList.toggle("selected", selected.has(f.id));
@@ -460,8 +551,8 @@ $("bulkDelete").addEventListener("click", async () => {
   refresh();
 });
 
-function promptForKey() {
-  const key = prompt("This server requires an API key:");
+function promptForKey(message = "This server requires an API key:") {
+  const key = prompt(message);
   if (!key) return;
   document.cookie = `audiolog_key=${encodeURIComponent(key.trim())}; path=/; max-age=31536000; SameSite=Lax`;
   location.reload();
@@ -609,7 +700,8 @@ async function fillLightbox(reset) {
   const f = await (await fetch(`/api/files/${openId}`)).json();
   $("lbTitle").textContent = f.filename;
   $("lbMeta").innerHTML =
-    [f.duration != null && fmtDur(f.duration), f.language, new Date(f.created_at).toLocaleString()]
+    [f.duration != null && fmtDur(f.duration), f.language, new Date(f.created_at).toLocaleString(),
+     me?.is_admin && f.owner && `👤 ${f.owner}`]
       .filter(Boolean).map(x => `<span>${x}</span>`).join("");
   $("lbStatus").textContent = f.status + (f.error ? " — " + f.error : "");
   document.querySelectorAll(".tabs button[data-tab]").forEach(b =>
@@ -875,8 +967,122 @@ $("modelSelect").addEventListener("change", async (e) => {
   loadModels();
 });
 
+/* ── Profile + user management ── */
+let me = null;
+let ownerFilter = null;  // admin-only: show just one user's files
+
+async function loadOwnerChips() {
+  const users = await (await fetch("/api/users")).json();
+  const box = $("ownerChips");
+  box.innerHTML = "";
+  const chips = [{ label: "All", value: null }]
+    .concat(users.map(u => ({ label: `${u.username} (${u.file_count})`, value: u.username })));
+  for (const c of chips) {
+    const b = document.createElement("button");
+    b.textContent = c.label;
+    b.classList.toggle("active", ownerFilter === c.value);
+    b.addEventListener("click", () => {
+      ownerFilter = c.value;
+      box.querySelectorAll("button").forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+      render();
+    });
+    box.appendChild(b);
+  }
+  box.style.display = "";
+}
+
+async function loadMe() {
+  const resp = await fetch("/api/me");
+  if (!resp.ok) return;
+  me = await resp.json();
+  const chip = `<span>👤</span><span></span>` +
+    (me.is_admin ? `<span class="role">admin</span>` : "");
+  for (const el of [$("profile"), $("profileInfo")]) {
+    el.innerHTML = chip;
+    el.children[1].textContent = me.username;
+  }
+  $("profileBtn").textContent = `👤 ${me.username}`;
+  if (me.is_admin) {
+    $("usersNav").style.display = "flex";
+    $("manageUsersBtn").style.display = "";
+    loadOwnerChips();
+    render();  // repaint tiles: owner badges depend on knowing we're admin
+  }
+}
+
+$("profileBtn").addEventListener("click", () => $("profileModal").classList.add("open"));
+$("profileClose").addEventListener("click", () => $("profileModal").classList.remove("open"));
+$("profileModal").addEventListener("click", (e) => {
+  if (e.target === $("profileModal")) $("profileModal").classList.remove("open");
+});
+$("switchProfileBtn").addEventListener("click", () =>
+  promptForKey("Enter the API key of the profile to switch to:"));
+$("manageUsersBtn").addEventListener("click", () => {
+  $("profileModal").classList.remove("open");
+  $("usersModal").classList.add("open");
+  loadUsers();
+});
+
+async function loadUsers() {
+  const users = await (await fetch("/api/users")).json();
+  const box = $("usersList");
+  box.innerHTML = "";
+  for (const u of users) {
+    const row = document.createElement("div");
+    row.className = "user-row";
+    row.innerHTML =
+      `<span class="uname"></span>` +
+      (u.is_admin ? `<span class="role" style="font-size:10px;font-weight:700;color:#fff;background:var(--primary);padding:2px 8px;border-radius:999px">ADMIN</span>` : "") +
+      `<span class="count">${u.file_count} recording${u.file_count === 1 ? "" : "s"}</span>` +
+      `<span class="ukey"></span>` +
+      (u.is_admin ? "" : `<button class="btn ghost danger" data-del="${u.id}">Delete</button>`);
+    row.querySelector(".uname").textContent = u.username;
+    row.querySelector(".ukey").textContent = u.api_key;
+    box.appendChild(row);
+  }
+  box.querySelectorAll("button[data-del]").forEach(b =>
+    b.addEventListener("click", async () => {
+      const u = users.find(x => x.id === Number(b.dataset.del));
+      if (!confirm(`Delete user "${u.username}"? Their ${u.file_count} recording(s) move to the admin account.`)) return;
+      const resp = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
+      if (!resp.ok) alert((await resp.json()).detail);
+      loadUsers();
+      loadOwnerChips();
+      refresh();
+    }));
+}
+
+$("usersNav").addEventListener("click", (e) => {
+  e.preventDefault();
+  $("usersModal").classList.add("open");
+  loadUsers();
+});
+$("usersClose").addEventListener("click", () => $("usersModal").classList.remove("open"));
+$("usersModal").addEventListener("click", (e) => {
+  if (e.target === $("usersModal")) $("usersModal").classList.remove("open");
+});
+
+$("addUserForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = $("newUsername").value.trim();
+  if (!username) return;
+  const resp = await fetch("/api/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+  if (!resp.ok) { alert((await resp.json()).detail); return; }
+  const u = await resp.json();
+  $("newUsername").value = "";
+  alert(`User "${u.username}" created.\n\nAPI key (give this to them):\n${u.api_key}`);
+  loadUsers();
+  loadOwnerChips();
+});
+
 loadConfig();
 loadModels();
+loadMe();
 refresh();
 setInterval(refresh, 3000);
 </script>
