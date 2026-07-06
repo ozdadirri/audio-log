@@ -136,8 +136,9 @@
   .tile .overlay {
     position: absolute; inset: auto 0 0 0; padding: 22px 10px 7px;
     background: linear-gradient(transparent, rgba(0,0,0,.72));
-    color: #fff; font-size: 11.5px; font-weight: 500;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    color: #fff; font-size: 11.5px; font-weight: 500; line-height: 1.35;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
   }
   .tile .dur {
     position: absolute; right: 8px; top: 8px;
@@ -155,17 +156,21 @@
   .tile.selected .check { opacity: 1; background: var(--primary); border-color: var(--primary); }
   .tile.selected { outline: 3px solid var(--primary); outline-offset: -3px; }
   .tile.selected img { transform: scale(.88); border-radius: 10px; transition: transform .15s; }
+  .tile .tl {
+    position: absolute; left: 8px; top: 8px;
+    display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+    transition: opacity .15s;
+  }
+  .tile:hover .tl { opacity: 0; }  /* yield to the selection circle */
   .badge {
-    position: absolute; left: 8px; bottom: 32px;
     font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
     padding: 3px 9px; border-radius: 999px; color: #fff;
   }
   .badge.pending, .badge.transcribing, .badge.summarizing { background: var(--warn); }
   .badge.error { background: var(--danger); }
   .tile .owner {
-    position: absolute; right: 8px; bottom: 32px;
     background: rgba(0,0,0,.55); color: #fff; font-size: 10px; font-weight: 600;
-    padding: 2px 8px; border-radius: 999px; max-width: 45%;
+    padding: 2px 8px; border-radius: 999px; max-width: 130px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .empty { color: var(--text-3); font-size: 14px; padding: 48px 0; text-align: center; }
@@ -584,13 +589,14 @@ function tile(f) {
   el.className = "tile" + (selected.has(f.id) ? " selected" : "");
   el.tabIndex = 0;
   const badge = f.status !== "done" ? `<span class="badge ${f.status}">${f.status}</span>` : "";
+  const owner = me?.is_admin && f.owner ? `<span class="owner"></span>` : "";
   const dur = f.duration != null ? `<span class="dur">${fmtDur(f.duration)}</span>` : "";
   el.innerHTML =
     `<div class="placeholder">…</div>` +
     `<img loading="lazy" src="${thumbUrl(f)}" alt=""` +
     ` onload="this.previousElementSibling.remove()" onerror="this.remove()">` +
-    `<span class="check">✓</span>` + badge + dur +
-    (me?.is_admin && f.owner ? `<span class="owner"></span>` : "") +
+    `<span class="check">✓</span>` + dur +
+    `<div class="tl">${owner}${badge}</div>` +
     `<div class="overlay"></div>`;
   el.querySelector(".overlay").textContent = f.title || f.filename;
   if (me?.is_admin && f.owner) el.querySelector(".owner").textContent = f.owner;
