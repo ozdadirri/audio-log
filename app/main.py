@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import assistant, config, db, export, pipeline, thumbnail, transcode
+from . import assistant, config, db, export, memory, pipeline, thumbnail, transcode
 from . import summarize as summarize_mod
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -157,6 +157,22 @@ def upload(file: UploadFile, request: Request):
     return {"saved": str(dest), "id": file_id}
 
 
+@app.get("/api/memory")
+def get_memory(request: Request):
+    return memory.status(request.state.user)
+
+
+@app.post("/api/memory/build")
+def build_memory(request: Request):
+    return memory.build(request.state.user)
+
+
+@app.delete("/api/memory")
+def reset_memory(request: Request):
+    db.delete_memory(request.state.user["id"])
+    return {"reset": True}
+
+
 @app.get("/api/me")
 def me(request: Request):
     user = request.state.user
@@ -277,8 +293,7 @@ class AskBody(BaseModel):
 def ask(body: AskBody, request: Request):
     if not body.question.strip():
         raise HTTPException(400, "empty question")
-    user = request.state.user
-    return assistant.ask(body.question, None if user["is_admin"] else user["id"],
+    return assistant.ask(body.question, request.state.user,
                          [t.model_dump() for t in body.history])
 
 
