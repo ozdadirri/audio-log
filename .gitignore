@@ -11,6 +11,9 @@ data/input/*
 !data/input/standup.aiff
 .DS_Store
 
+# local secrets
+.env
+
 # xcode
 xcuserdata/
 *.xcuserstate
