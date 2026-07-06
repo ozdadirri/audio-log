@@ -388,7 +388,7 @@ function render() {
 
 // version param busts the immutable browser cache when the thumbnail scheme changes
 function thumbUrl(f) {
-  return `/api/files/${f.id}/thumb?v=2-${f.created_at.slice(0, 10)}`;
+  return `/api/files/${f.id}/thumb?v=3-${f.created_at.slice(0, 10)}`;
 }
 
 function tile(f) {

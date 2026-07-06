@@ -5,7 +5,7 @@ different days are visually distinct. Cached under DATA_DIR/thumbs by content ha
 import colorsys
 import logging
 import subprocess
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -28,8 +28,12 @@ GOLDEN_ANGLE = 137.508
 
 
 def date_hue(created_at: str) -> int:
-    """Hue in degrees derived from the date part of an ISO timestamp."""
-    days = date.fromisoformat(created_at[:10]).toordinal()
+    """Hue in degrees derived from the *local* date of an ISO timestamp, so the
+    color matches the UI's Today/Yesterday grouping (created_at is stored UTC)."""
+    dt = datetime.fromisoformat(created_at)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone()  # server-local timezone
+    days = dt.date().toordinal()
     return round(days * GOLDEN_ANGLE) % 360
 
 
