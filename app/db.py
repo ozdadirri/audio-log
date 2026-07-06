@@ -296,12 +296,14 @@ def delete_file(file_id: int):
 
 def list_files(user_id: int | None = None) -> list[dict]:
     """user_id scopes to one owner; None = all files (admin)."""
-    scope = "WHERE user_id = ? " if user_id is not None else ""
+    scope = "WHERE f.user_id = ? " if user_id is not None else ""
     with connect() as conn:
         rows = conn.execute(
-            "SELECT id, sha256, filename, source_path, status, error, language, "
-            "duration, output_dir, user_id, created_at, updated_at "
-            f"FROM files {scope}ORDER BY id DESC",
+            "SELECT f.id, f.sha256, f.filename, f.source_path, f.status, f.error, "
+            "f.language, f.duration, f.output_dir, f.user_id, f.created_at, "
+            "f.updated_at, u.username AS owner "
+            "FROM files f LEFT JOIN users u ON u.id = f.user_id "
+            f"{scope}ORDER BY f.id DESC",
             (user_id,) if user_id is not None else (),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -309,5 +311,9 @@ def list_files(user_id: int | None = None) -> list[dict]:
 
 def get_file(file_id: int) -> dict | None:
     with connect() as conn:
-        row = conn.execute("SELECT * FROM files WHERE id = ?", (file_id,)).fetchone()
+        row = conn.execute(
+            "SELECT f.*, u.username AS owner FROM files f "
+            "LEFT JOIN users u ON u.id = f.user_id WHERE f.id = ?",
+            (file_id,),
+        ).fetchone()
         return dict(row) if row else None
