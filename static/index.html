@@ -381,6 +381,7 @@
       <input id="searchInput" type="search" placeholder="Search transcripts — press Enter to ask AI…">
     </div>
     <button class="btn ghost" id="profileBtn" title="Profile">👤</button>
+    <button class="btn ghost" id="memoryBtn" title="Long-term memory">Memory</button>
     <span id="busyNote" style="display:none;font-size:12px;color:var(--warn);font-weight:600">
       ⚙ processing — playback may stutter while the AI models run</span>
     <span id="uploadMsg"></span>
@@ -444,7 +445,6 @@
     <div class="profile" id="profileInfo" style="margin-bottom:16px">(not signed in)</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn ghost" id="switchProfileBtn">Switch profile…</button>
-      <button class="btn ghost" id="memoryFromProfile">Memory</button>
       <button class="btn" id="manageUsersBtn" style="display:none">Manage users</button>
     </div>
   </div>
@@ -1278,7 +1278,7 @@ $("memoryLang").addEventListener("click", async () => {
 });
 
 $("memoryNav").addEventListener("click", (e) => { e.preventDefault(); openMemory(); });
-$("memoryFromProfile").addEventListener("click", openMemory);
+$("memoryBtn").addEventListener("click", openMemory);
 $("memoryClose").addEventListener("click", () => $("memoryModal").classList.remove("open"));
 $("memoryModal").addEventListener("click", (e) => {
   if (e.target === $("memoryModal")) $("memoryModal").classList.remove("open");
