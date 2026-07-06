@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS memories (
     user_id      INTEGER PRIMARY KEY,
     content      TEXT NOT NULL,
+    content_zh   TEXT,
     last_file_id INTEGER NOT NULL DEFAULT 0,
     updated_at   TEXT NOT NULL
 );
@@ -71,6 +72,9 @@ def init():
                 conn.execute(f"ALTER TABLE files ADD COLUMN {col} TEXT")
         if "user_id" not in cols:
             conn.execute("ALTER TABLE files ADD COLUMN user_id INTEGER")
+        mem_cols = {r[1] for r in conn.execute("PRAGMA table_info(memories)")}
+        if mem_cols and "content_zh" not in mem_cols:
+            conn.execute("ALTER TABLE memories ADD COLUMN content_zh TEXT")
         conn.execute(
             "CREATE VIRTUAL TABLE IF NOT EXISTS files_fts "
             "USING fts5(filename, transcript, summary)"
@@ -243,13 +247,20 @@ def get_memory(user_id: int) -> dict | None:
 
 def set_memory(user_id: int, content: str, last_file_id: int):
     with connect() as conn:
+        # content changed -> any cached translation is stale
         conn.execute(
-            "INSERT INTO memories (user_id, content, last_file_id, updated_at) "
-            "VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
-            "content = excluded.content, last_file_id = excluded.last_file_id, "
-            "updated_at = excluded.updated_at",
+            "INSERT INTO memories (user_id, content, content_zh, last_file_id, updated_at) "
+            "VALUES (?, ?, NULL, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+            "content = excluded.content, content_zh = NULL, "
+            "last_file_id = excluded.last_file_id, updated_at = excluded.updated_at",
             (user_id, content, last_file_id, _now()),
         )
+
+
+def set_memory_zh(user_id: int, content_zh: str):
+    with connect() as conn:
+        conn.execute("UPDATE memories SET content_zh = ? WHERE user_id = ?",
+                     (content_zh, user_id))
 
 
 def delete_memory(user_id: int):

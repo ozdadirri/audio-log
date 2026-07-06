@@ -134,13 +134,11 @@
   }
   @keyframes shimmer { to { background-position: -200% 0; } }
   .tile .overlay {
-    position: absolute; inset: auto 0 0 0; padding: 24px 10px 8px;
-    background: linear-gradient(transparent, rgba(0,0,0,.75));
-    color: #fff; font-size: 12px; font-weight: 500;
+    position: absolute; inset: auto 0 0 0; padding: 22px 10px 7px;
+    background: linear-gradient(transparent, rgba(0,0,0,.72));
+    color: #fff; font-size: 11.5px; font-weight: 500;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    opacity: 0; transition: opacity .15s;
   }
-  .tile:hover .overlay, .tile:focus .overlay { opacity: 1; }
   .tile .dur {
     position: absolute; right: 8px; top: 8px;
     background: rgba(0,0,0,.55); color: #fff; font-size: 11px; font-weight: 600;
@@ -158,14 +156,14 @@
   .tile.selected { outline: 3px solid var(--primary); outline-offset: -3px; }
   .tile.selected img { transform: scale(.88); border-radius: 10px; transition: transform .15s; }
   .badge {
-    position: absolute; left: 8px; bottom: 8px;
+    position: absolute; left: 8px; bottom: 32px;
     font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
     padding: 3px 9px; border-radius: 999px; color: #fff;
   }
   .badge.pending, .badge.transcribing, .badge.summarizing { background: var(--warn); }
   .badge.error { background: var(--danger); }
   .tile .owner {
-    position: absolute; right: 8px; bottom: 8px;
+    position: absolute; right: 8px; bottom: 32px;
     background: rgba(0,0,0,.55); color: #fff; font-size: 10px; font-weight: 600;
     padding: 2px 8px; border-radius: 999px; max-width: 45%;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -277,6 +275,13 @@
     padding: 5px 12px; border-radius: 999px;
   }
   .ask-sources button:hover { border-color: var(--primary); color: var(--primary); }
+  .chat-input { display: flex; gap: 8px; margin-top: 16px; }
+  .chat-input input {
+    flex: 1; font: inherit; font-size: 14px; padding: 9px 14px;
+    border: 1px solid var(--line); border-radius: 999px; outline: 0;
+  }
+  .chat-input input:focus { border-color: var(--primary); }
+  .chat-input .btn { padding: 8px 18px; }
   .ask-close { float: right; border: 0; background: none; cursor: pointer; color: var(--text-3); font-size: 14px; }
 
   /* ── Users admin panel + profile modal ───── */
@@ -433,7 +438,7 @@
     <div class="profile" id="profileInfo" style="margin-bottom:16px">(not signed in)</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn ghost" id="switchProfileBtn">Switch profile…</button>
-      <button class="btn ghost" id="memoryFromProfile">🧠 Memory</button>
+      <button class="btn ghost" id="memoryFromProfile">Memory</button>
       <button class="btn" id="manageUsersBtn" style="display:none">Manage users</button>
     </div>
   </div>
@@ -442,10 +447,11 @@
 <div id="memoryModal">
   <div class="users-card">
     <button class="ask-close" id="memoryClose">✕</button>
-    <h3>🧠 Memory</h3>
+    <h3>Memory</h3>
     <div id="memoryMeta" style="font-size:12px;color:var(--text-3);margin-bottom:12px"></div>
-    <div style="display:flex;gap:8px;margin-bottom:16px">
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <button class="btn" id="memoryBuild">Update memory</button>
+      <button class="btn ghost" id="memoryLang">中文</button>
       <button class="btn ghost danger" id="memoryReset">Reset</button>
     </div>
     <div class="md" id="memoryContent"></div>
@@ -503,6 +509,8 @@ function fileTags(f) {
 }
 
 let tagFilter = null;
+let tagsExpanded = false;
+const TAG_CHIP_LIMIT = 6;
 
 function renderTagChips() {
   const counts = new Map();
@@ -512,15 +520,28 @@ function renderTagChips() {
   if (!counts.size) { box.style.display = "none"; return; }
   if (tagFilter && !counts.has(tagFilter)) tagFilter = null;
   box.innerHTML = "";
-  const chips = [["all", null]].concat([...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([t, n]) => [`#${t} (${n})`, t]));
+  let tags = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const hidden = Math.max(tags.length - TAG_CHIP_LIMIT, 0);
+  if (!tagsExpanded && hidden > 0) {
+    // keep the active tag visible even if it ranks below the fold
+    tags = tags.slice(0, TAG_CHIP_LIMIT);
+    if (tagFilter && !tags.some(([t]) => t === tagFilter))
+      tags.push([tagFilter, counts.get(tagFilter)]);
+  }
+  const chips = [["all", null]].concat(tags.map(([t, n]) => [`#${t} (${n})`, t]));
   for (const [label, value] of chips) {
     const b = document.createElement("button");
     b.textContent = label;
     b.classList.toggle("active", tagFilter === value);
     b.addEventListener("click", () => { tagFilter = value; renderTagChips(); render(); });
     box.appendChild(b);
+  }
+  if (hidden > 0) {
+    const more = document.createElement("button");
+    more.textContent = tagsExpanded ? "less" : `+${hidden} more`;
+    more.style.borderStyle = "dashed";
+    more.addEventListener("click", () => { tagsExpanded = !tagsExpanded; renderTagChips(); });
+    box.appendChild(more);
   }
   box.style.display = "";
 }
@@ -1004,6 +1025,16 @@ function renderChat() {
     t.className = "thinking";
     t.textContent = "Searching recordings and thinking";
     box.append(q, t);
+  } else {
+    const row = document.createElement("div");
+    row.className = "chat-input";
+    row.innerHTML = `<input placeholder="Follow up…"><button class="btn">Send</button>`;
+    const input = row.querySelector("input");
+    const send = () => { if (input.value.trim()) askAI(input.value.trim()); };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    row.querySelector("button").addEventListener("click", send);
+    box.appendChild(row);
+    input.focus();
   }
   panel.querySelector(".ask-close").addEventListener("click", () => {
     chat = [];
@@ -1179,23 +1210,50 @@ $("addUserForm").addEventListener("submit", async (e) => {
 });
 
 /* ── Memory ── */
+let memLang = "en";
+let memData = null;
+
 async function openMemory() {
   $("profileModal").classList.remove("open");
   $("memoryModal").classList.add("open");
+  memLang = "en";
+  $("memoryLang").textContent = "中文";
   await refreshMemory();
 }
 
-async function refreshMemory() {
-  const m = await (await fetch("/api/memory")).json();
-  $("memoryMeta").textContent =
-    (m.updated_at ? `updated ${new Date(m.updated_at).toLocaleString()}` : "never built") +
-    ` · ${m.pending} new recording${m.pending === 1 ? "" : "s"} to fold in`;
-  $("memoryBuild").textContent = m.pending ? `Update memory (${m.pending} new)` : "Up to date";
-  $("memoryBuild").disabled = !m.pending;
-  $("memoryContent").innerHTML = m.content
-    ? renderMarkdown(m.content)
+function renderMemoryContent() {
+  const text = memLang === "zh" ? memData?.content_zh : memData?.content;
+  if (memLang === "zh" && !text) {
+    $("memoryContent").innerHTML = `<p style="color:var(--text-3)">(translating…)</p>`;
+    return;
+  }
+  $("memoryContent").innerHTML = text
+    ? renderMarkdown(text)
     : `<p style="color:var(--text-3)">No memory yet — press Update to distill your recordings into a long-term memory. The AI assistant uses it to answer questions that span many recordings.</p>`;
 }
+
+async function refreshMemory() {
+  memData = await (await fetch("/api/memory")).json();
+  $("memoryMeta").textContent =
+    (memData.updated_at ? `updated ${new Date(memData.updated_at).toLocaleString()}` : "never built") +
+    ` · ${memData.pending} new recording${memData.pending === 1 ? "" : "s"} to fold in`;
+  $("memoryBuild").textContent = memData.pending ? `Update memory (${memData.pending} new)` : "Up to date";
+  $("memoryBuild").disabled = !memData.pending;
+  $("memoryLang").style.display = memData.content ? "" : "none";
+  renderMemoryContent();
+}
+
+$("memoryLang").addEventListener("click", async () => {
+  memLang = memLang === "en" ? "zh" : "en";
+  $("memoryLang").textContent = memLang === "zh" ? "EN" : "中文";
+  renderMemoryContent();
+  if (memLang === "zh" && memData && !memData.content_zh) {
+    const resp = await fetch("/api/memory/translate", { method: "POST" });
+    if (resp.ok) memData.content_zh = (await resp.json()).content_zh;
+    else memData.content_zh = "⚠ " + (await resp.json()).detail;
+    renderMemoryContent();
+  }
+});
 
 $("memoryNav").addEventListener("click", (e) => { e.preventDefault(); openMemory(); });
 $("memoryFromProfile").addEventListener("click", openMemory);

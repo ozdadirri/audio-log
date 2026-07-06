@@ -167,6 +167,14 @@ def build_memory(request: Request):
     return memory.build(request.state.user)
 
 
+@app.post("/api/memory/translate")
+def translate_memory(request: Request):
+    zh = memory.translate(request.state.user)
+    if zh is None:
+        raise HTTPException(409, "no memory to translate yet")
+    return {"content_zh": zh}
+
+
 @app.delete("/api/memory")
 def reset_memory(request: Request):
     db.delete_memory(request.state.user["id"])
