@@ -239,6 +239,15 @@
     width: 38px; height: 38px; border-radius: 50%;
     background: rgba(255,255,255,.12); color: #fff; font-size: 17px;
   }
+  /* ── Owner filter chips (admin) ──────────── */
+  #ownerChips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  #ownerChips button {
+    border: 1px solid var(--line); background: var(--card); cursor: pointer;
+    font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-2);
+    padding: 6px 14px; border-radius: 999px;
+  }
+  #ownerChips button.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
   /* ── Ask AI panel ────────────────────────── */
   .ask-card {
     background: var(--card); border: 1px solid var(--line); border-radius: 14px;
@@ -368,6 +377,7 @@
   </header>
 
   <div class="content">
+    <div id="ownerChips" style="display:none"></div>
     <div id="askPanel"></div>
     <div id="content"></div>
   </div>
@@ -461,7 +471,8 @@ async function loadConfig() {
 
 function render() {
   const shown = files.filter(f =>
-    !query || f.filename.toLowerCase().includes(query) || (matchIds && matchIds.has(f.id)));
+    (!ownerFilter || f.owner === ownerFilter) &&
+    (!query || f.filename.toLowerCase().includes(query) || (matchIds && matchIds.has(f.id))));
   const content = $("content");
   if (!shown.length) {
     content.innerHTML = `<div class="empty">${files.length ? "No matches." :
@@ -958,6 +969,28 @@ $("modelSelect").addEventListener("change", async (e) => {
 
 /* ── Profile + user management ── */
 let me = null;
+let ownerFilter = null;  // admin-only: show just one user's files
+
+async function loadOwnerChips() {
+  const users = await (await fetch("/api/users")).json();
+  const box = $("ownerChips");
+  box.innerHTML = "";
+  const chips = [{ label: "All", value: null }]
+    .concat(users.map(u => ({ label: `${u.username} (${u.file_count})`, value: u.username })));
+  for (const c of chips) {
+    const b = document.createElement("button");
+    b.textContent = c.label;
+    b.classList.toggle("active", ownerFilter === c.value);
+    b.addEventListener("click", () => {
+      ownerFilter = c.value;
+      box.querySelectorAll("button").forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+      render();
+    });
+    box.appendChild(b);
+  }
+  box.style.display = "";
+}
 
 async function loadMe() {
   const resp = await fetch("/api/me");
@@ -973,6 +1006,7 @@ async function loadMe() {
   if (me.is_admin) {
     $("usersNav").style.display = "flex";
     $("manageUsersBtn").style.display = "";
+    loadOwnerChips();
     render();  // repaint tiles: owner badges depend on knowing we're admin
   }
 }
@@ -1014,6 +1048,7 @@ async function loadUsers() {
       const resp = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
       if (!resp.ok) alert((await resp.json()).detail);
       loadUsers();
+      loadOwnerChips();
       refresh();
     }));
 }
@@ -1042,6 +1077,7 @@ $("addUserForm").addEventListener("submit", async (e) => {
   $("newUsername").value = "";
   alert(`User "${u.username}" created.\n\nAPI key (give this to them):\n${u.api_key}`);
   loadUsers();
+  loadOwnerChips();
 });
 
 loadConfig();
