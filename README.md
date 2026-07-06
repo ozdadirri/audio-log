@@ -46,8 +46,8 @@ Everything runs locally — no cloud services.
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
-# start the service
-.venv/bin/uvicorn app.main:app --port 8300 --reload
+# start the service (0.0.0.0 so iPhone/iPad on the same WiFi can connect)
+.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8300 --reload
 ```
 
 Open http://localhost:8300. Files dropped into `data/input/` (or uploaded /
@@ -81,6 +81,21 @@ into `~/.cache/huggingface/`.
   mic captures breaks all browser audio until restart. `/mictest` is a
   standalone diagnostic page — Test 4's beep failing means the browser's audio
   output is wedged (fix: reboot or `sudo killall coreaudiod`), not an app bug.
+
+## iPhone / iPad app (PWA)
+
+The web UI installs as an app on iOS/iPadOS:
+
+1. Start the server with `--host 0.0.0.0` (see Run above) and find your Mac's
+   address: `ipconfig getifaddr en0` (e.g. `192.168.1.20`).
+2. On the iPhone/iPad (same WiFi), open `http://192.168.1.20:8300` in Safari.
+3. Tap **Share → Add to Home Screen**. You get a full-screen AudioLog app with
+   its own icon.
+
+Everything works from the device — browsing, playback, upload, search, Ask AI,
+translation — **except mic recording**: browsers only allow microphone access
+on HTTPS or localhost, and the LAN connection is plain HTTP. Record with the
+Voice Memos app and share/upload the file instead, or record on the Mac.
 
 ## API
 

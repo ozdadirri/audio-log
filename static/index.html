@@ -2,8 +2,15 @@
 <html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>audio-log</title>
+<link rel="manifest" href="/static/manifest.webmanifest">
+<meta name="theme-color" content="#3563E9">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="AudioLog">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/static/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -250,6 +257,18 @@
     aside { display: none; }
     .lb-card { flex-direction: column; overflow-y: auto; }
     .lb-left { width: 100%; }
+    header {
+      flex-wrap: wrap; gap: 10px;
+      padding: 10px 14px;
+      padding-top: max(10px, env(safe-area-inset-top));
+    }
+    .search { order: 3; min-width: 100%; }
+    #uploadMsg { display: none; }
+    .content { padding: 16px 14px 48px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 5px; }
+    #lightbox { padding: 0; }
+    .lb-card { border-radius: 0; height: 100%; max-height: none; }
+    .lb-close { z-index: 101; }
   }
 </style>
 </head>
