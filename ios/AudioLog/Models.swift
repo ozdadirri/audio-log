@@ -85,6 +85,11 @@ struct AskResponse: Codable {
     let sources: [AskSource]
 }
 
+struct ChatTurn: Codable {
+    let question: String
+    let answer: String
+}
+
 struct TranslateResponse: Codable {
     let summaryZh: String
     enum CodingKeys: String, CodingKey { case summaryZh = "summary_zh" }

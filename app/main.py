@@ -246,8 +246,14 @@ def search(request: Request, q: str = ""):
     return db.search(q, None if user["is_admin"] else user["id"])
 
 
+class HistoryTurn(BaseModel):
+    question: str
+    answer: str
+
+
 class AskBody(BaseModel):
     question: str
+    history: list[HistoryTurn] = []
 
 
 @app.post("/api/ask")
@@ -255,7 +261,8 @@ def ask(body: AskBody, request: Request):
     if not body.question.strip():
         raise HTTPException(400, "empty question")
     user = request.state.user
-    return assistant.ask(body.question, None if user["is_admin"] else user["id"])
+    return assistant.ask(body.question, None if user["is_admin"] else user["id"],
+                         [t.model_dump() for t in body.history])
 
 
 @app.get("/api/models")

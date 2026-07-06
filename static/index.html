@@ -253,7 +253,12 @@
     background: var(--card); border: 1px solid var(--line); border-radius: 14px;
     padding: 20px 22px; margin-bottom: 24px;
   }
-  .ask-card .q { font-size: 13px; font-weight: 700; color: var(--primary); margin-bottom: 10px; }
+  .ask-card .q {
+    font-size: 13.5px; font-weight: 600; color: #fff; background: var(--primary);
+    padding: 8px 14px; border-radius: 14px 14px 4px 14px;
+    margin: 14px 0 10px auto; max-width: 85%; width: fit-content;
+  }
+  .ask-card .chat > .q:first-child { margin-top: 0; }
   .ask-card .a { font-size: 14px; line-height: 1.75; color: var(--text-2); }
   .ask-card .thinking { color: var(--text-3); font-size: 13.5px; }
   .ask-card .thinking::after {
@@ -908,36 +913,70 @@ $("searchInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && e.target.value.trim()) askAI(e.target.value.trim());
 });
 
-async function askAI(question) {
+let chat = [];        // [{question, answer, sources}]
+let chatPending = null;  // question currently being answered
+
+function renderChat() {
   const panel = $("askPanel");
-  panel.innerHTML = `<div class="ask-card"><div class="q"></div><div class="thinking">Searching recordings and thinking</div></div>`;
-  panel.querySelector(".q").textContent = question;
+  if (!chat.length && !chatPending) { panel.innerHTML = ""; return; }
+  panel.innerHTML = `<div class="ask-card"><button class="ask-close">✕</button><div class="chat"></div></div>`;
+  const box = panel.querySelector(".chat");
+  for (const turn of chat) {
+    const q = document.createElement("div");
+    q.className = "q";
+    q.textContent = turn.question;
+    const a = document.createElement("div");
+    a.className = "a md";
+    a.innerHTML = renderMarkdown(turn.answer);
+    const src = document.createElement("div");
+    src.className = "ask-sources";
+    for (const s of turn.sources) {
+      const b = document.createElement("button");
+      b.textContent = `#${s.id} ${s.filename}`;
+      b.addEventListener("click", () => openLightbox(s.id));
+      src.appendChild(b);
+    }
+    box.append(q, a, src);
+  }
+  if (chatPending) {
+    const q = document.createElement("div");
+    q.className = "q";
+    q.textContent = chatPending;
+    const t = document.createElement("div");
+    t.className = "thinking";
+    t.textContent = "Searching recordings and thinking";
+    box.append(q, t);
+  }
+  panel.querySelector(".ask-close").addEventListener("click", () => {
+    chat = [];
+    chatPending = null;
+    renderChat();
+  });
+}
+
+async function askAI(question) {
+  if (chatPending) return;  // one at a time
+  chatPending = question;
+  $("searchInput").value = "";
+  query = ""; matchIds = null; render();
+  renderChat();
   let data;
   try {
     const resp = await fetch("/api/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({
+        question,
+        history: chat.map(t => ({ question: t.question, answer: t.answer })).slice(-4),
+      }),
     });
     data = resp.ok ? await resp.json() : { answer: "Error: " + (await resp.json()).detail, sources: [] };
   } catch (err) {
     data = { answer: "Request failed: " + err, sources: [] };
   }
-  panel.innerHTML = `<div class="ask-card">
-    <button class="ask-close">✕</button>
-    <div class="q"></div><div class="a"></div><div class="ask-sources"></div>
-  </div>`;
-  panel.querySelector(".q").textContent = question;
-  panel.querySelector(".a").classList.add("md");
-  panel.querySelector(".a").innerHTML = renderMarkdown(data.answer);
-  const srcBox = panel.querySelector(".ask-sources");
-  for (const s of data.sources) {
-    const b = document.createElement("button");
-    b.textContent = `#${s.id} ${s.filename}`;
-    b.addEventListener("click", () => openLightbox(s.id));
-    srcBox.appendChild(b);
-  }
-  panel.querySelector(".ask-close").addEventListener("click", () => panel.innerHTML = "");
+  chat.push({ question, answer: data.answer, sources: data.sources });
+  chatPending = null;
+  renderChat();
 }
 
 /* ── Summary model picker ── */
