@@ -10,3 +10,8 @@ data/*
 data/input/*
 !data/input/standup.aiff
 .DS_Store
+
+# xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
