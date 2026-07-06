@@ -105,6 +105,13 @@ def _process(job):
         "summary_model": config.OLLAMA_MODEL,
     }, indent=2))
 
+    try:
+        title = summarize.make_title(summary_md)
+        if title:
+            db.set_title(file_id, title)
+    except Exception:
+        log.exception("title generation failed for %s", source.name)
+
     db.set_texts(file_id, transcript_md, summary_md)
     db.set_result(file_id, language=result.get("language"), duration=duration,
                   output_dir=str(out_dir))

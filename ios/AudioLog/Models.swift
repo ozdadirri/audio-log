@@ -3,6 +3,7 @@ import Foundation
 struct RecordingFile: Identifiable, Codable, Equatable {
     let id: Int
     let filename: String
+    let title: String?
     let status: String
     let error: String?
     let language: String?
@@ -12,10 +13,12 @@ struct RecordingFile: Identifiable, Codable, Equatable {
     let updatedAt: String
 
     enum CodingKeys: String, CodingKey {
-        case id, filename, status, error, language, duration, owner
+        case id, filename, title, status, error, language, duration, owner
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
+
+    var displayName: String { title?.isEmpty == false ? title! : filename }
 
     var createdDate: Date {
         ISO8601DateFormatter().date(from: createdAt) ?? Date()
@@ -33,6 +36,7 @@ struct RecordingFile: Identifiable, Codable, Equatable {
 struct FileDetail: Codable {
     let id: Int
     let filename: String
+    let title: String?
     let status: String
     let error: String?
     let language: String?
@@ -43,7 +47,7 @@ struct FileDetail: Codable {
     let summaryZh: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, filename, status, error, language, duration, transcript, summary
+        case id, filename, title, status, error, language, duration, transcript, summary
         case createdAt = "created_at"
         case summaryZh = "summary_zh"
     }
