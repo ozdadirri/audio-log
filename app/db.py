@@ -36,6 +36,14 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS embeddings (
+    file_id   INTEGER NOT NULL,
+    chunk_idx INTEGER NOT NULL,
+    text      TEXT NOT NULL,
+    vector    BLOB NOT NULL,
+    PRIMARY KEY (file_id, chunk_idx)
+);
+
 CREATE TABLE IF NOT EXISTS memories (
     user_id      INTEGER PRIMARY KEY,
     content      TEXT NOT NULL,
@@ -380,6 +388,38 @@ def delete_file(file_id: int):
     with connect() as conn:
         conn.execute("DELETE FROM files WHERE id = ?", (file_id,))
         conn.execute("DELETE FROM files_fts WHERE rowid = ?", (file_id,))
+        conn.execute("DELETE FROM embeddings WHERE file_id = ?", (file_id,))
+
+
+def replace_embeddings(file_id: int, chunks: list[tuple[str, bytes]]):
+    with connect() as conn:
+        conn.execute("DELETE FROM embeddings WHERE file_id = ?", (file_id,))
+        conn.executemany(
+            "INSERT INTO embeddings (file_id, chunk_idx, text, vector) VALUES (?, ?, ?, ?)",
+            [(file_id, i, text, vector) for i, (text, vector) in enumerate(chunks)],
+        )
+
+
+def all_embeddings(user_id: int | None = None) -> list[dict]:
+    """Every indexed chunk visible to the user (trash excluded)."""
+    scope = "AND f.user_id = ? " if user_id is not None else ""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT e.file_id, e.text, e.vector, f.filename, f.created_at "
+            "FROM embeddings e JOIN files f ON f.id = e.file_id "
+            f"WHERE f.deleted_at IS NULL {scope}ORDER BY e.file_id, e.chunk_idx",
+            (user_id,) if user_id is not None else (),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def files_missing_embeddings() -> list[int]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT id FROM files WHERE transcript IS NOT NULL AND deleted_at IS NULL "
+            "AND id NOT IN (SELECT DISTINCT file_id FROM embeddings) ORDER BY id"
+        ).fetchall()
+        return [r["id"] for r in rows]
 
 
 def soft_delete_file(file_id: int):
