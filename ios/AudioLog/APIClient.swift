@@ -125,8 +125,13 @@ struct APIClient {
         return response.summaryZh
     }
 
-    static func ask(question: String) async throws -> AskResponse {
-        let body = try JSONEncoder().encode(["question": question])
+    static func ask(question: String, history: [ChatTurn] = []) async throws -> AskResponse {
+        struct Payload: Encodable {
+            let question: String
+            let history: [ChatTurn]
+        }
+        let body = try JSONEncoder().encode(Payload(question: question,
+                                                    history: Array(history.suffix(4))))
         return try await send("/api/ask", method: "POST", body: body,
                               contentType: "application/json")
     }
