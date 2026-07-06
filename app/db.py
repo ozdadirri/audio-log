@@ -59,7 +59,7 @@ def init():
     with connect() as conn:
         conn.executescript(SCHEMA)
         cols = {r[1] for r in conn.execute("PRAGMA table_info(files)")}
-        for col in ("transcript", "summary", "summary_zh", "title"):
+        for col in ("transcript", "summary", "summary_zh", "title", "tags"):
             if col not in cols:
                 conn.execute(f"ALTER TABLE files ADD COLUMN {col} TEXT")
         if "user_id" not in cols:
@@ -246,6 +246,12 @@ def set_title(file_id: int, title: str):
         conn.execute("UPDATE files SET title = ? WHERE id = ?", (title, file_id))
 
 
+def set_tags(file_id: int, tags: str):
+    """tags: comma-separated lowercase labels."""
+    with connect() as conn:
+        conn.execute("UPDATE files SET tags = ? WHERE id = ?", (tags, file_id))
+
+
 def set_summary_zh(file_id: int, text: str):
     with connect() as conn:
         conn.execute("UPDATE files SET summary_zh = ? WHERE id = ?", (text, file_id))
@@ -304,9 +310,9 @@ def list_files(user_id: int | None = None) -> list[dict]:
     scope = "WHERE f.user_id = ? " if user_id is not None else ""
     with connect() as conn:
         rows = conn.execute(
-            "SELECT f.id, f.sha256, f.filename, f.title, f.source_path, f.status, "
-            "f.error, f.language, f.duration, f.output_dir, f.user_id, f.created_at, "
-            "f.updated_at, u.username AS owner "
+            "SELECT f.id, f.sha256, f.filename, f.title, f.tags, f.source_path, "
+            "f.status, f.error, f.language, f.duration, f.output_dir, f.user_id, "
+            "f.created_at, f.updated_at, u.username AS owner "
             "FROM files f LEFT JOIN users u ON u.id = f.user_id "
             f"{scope}ORDER BY f.id DESC",
             (user_id,) if user_id is not None else (),

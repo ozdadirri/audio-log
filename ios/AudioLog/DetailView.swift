@@ -29,6 +29,16 @@ struct DetailView: View {
                     .listRowInsets(EdgeInsets())
 
                     playerControls
+                    if let detail, !detail.tagList.isEmpty {
+                        HStack {
+                            ForEach(detail.tagList, id: \.self) { tag in
+                                Text("#\(tag)")
+                                    .font(.caption.bold()).foregroundStyle(.secondary)
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(.quaternary, in: Capsule())
+                            }
+                        }
+                    }
                 }
 
                 if let errorMessage {

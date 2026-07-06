@@ -109,8 +109,11 @@ def _process(job):
         title = summarize.make_title(summary_md)
         if title:
             db.set_title(file_id, title)
+        tags = summarize.make_tags(summary_md)
+        if tags:
+            db.set_tags(file_id, tags)
     except Exception:
-        log.exception("title generation failed for %s", source.name)
+        log.exception("title/tag generation failed for %s", source.name)
 
     db.set_texts(file_id, transcript_md, summary_md)
     db.set_result(file_id, language=result.get("language"), duration=duration,

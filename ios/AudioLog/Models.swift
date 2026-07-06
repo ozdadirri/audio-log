@@ -41,15 +41,21 @@ struct FileDetail: Codable {
     let error: String?
     let language: String?
     let duration: Double?
+    let tags: String?
     let createdAt: String
     let transcript: String?
     let summary: String?
     let summaryZh: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, filename, title, status, error, language, duration, transcript, summary
+        case id, filename, title, status, error, language, duration, tags,
+             transcript, summary
         case createdAt = "created_at"
         case summaryZh = "summary_zh"
+    }
+
+    var tagList: [String] {
+        (tags ?? "").split(separator: ",").map(String.init)
     }
 }
 
