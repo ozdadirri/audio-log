@@ -116,6 +116,21 @@ Voice Memos app and share/upload the file instead, or record on the Mac.
 | DELETE | `/api/users/{id}` | admin: delete user; their files move to admin |
 | GET | `/api/config` | effective configuration |
 
+## Google Drive sync
+
+Install [Google Drive for desktop](https://www.google.com/drive/download/),
+then wire two folders in `.env`:
+
+```bash
+AUDIOLOG_EXTRA_INPUT_DIRS=/Users/<you>/Library/CloudStorage/GoogleDrive-<account>/My Drive/AudioLog/inbox
+AUDIOLOG_PUBLISH_DIR=/Users/<you>/Library/CloudStorage/GoogleDrive-<account>/My Drive/AudioLog/digests
+```
+
+Audio dropped into the Drive `inbox` folder (from any device, including the
+Drive mobile app) is transcribed automatically, and every finished job's
+`transcript.md` / `summary.md` / `meta.json` are mirrored to `digests`, which
+Drive syncs back to all your devices.
+
 ## Remote access & HTTPS (Tailscale)
 
 Install [Tailscale](https://tailscale.com) on the Mac and your devices (same
@@ -153,6 +168,8 @@ and Ask AI are scoped the same way. Watched-folder files belong to the admin.
 | `AUDIOLOG_WHISPER_MODEL` | `mlx-community/whisper-large-v3-turbo` | HF repo of the mlx whisper model |
 | `AUDIOLOG_OLLAMA_MODEL` | `qwen3.6:27b` | Ollama model for summaries/translation/assistant |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama server |
+| `AUDIOLOG_EXTRA_INPUT_DIRS` | *(empty)* | comma-separated additional watched folders |
+| `AUDIOLOG_PUBLISH_DIR` | *(empty)* | mirror each job's outputs (transcript/summary/meta) here |
 | `AUDIOLOG_SCAN_INTERVAL` | `3` | seconds between input dir scans |
 | `AUDIOLOG_API_KEY` | *(empty = auth off)* | require this key on all `/api` requests (`X-API-Key` header, `?key=`, or cookie). The web UI prompts for it; the iOS app has a Settings field. Generate one with `openssl rand -hex 16`. |
 | `AUDIOLOG_DATA_DIR` | `./data` | base dir for db, caches, default input/output |
