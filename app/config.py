@@ -4,6 +4,16 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load KEY=value lines from a git-ignored .env file (real env vars still win).
+_env_file = BASE_DIR / ".env"
+if _env_file.exists():
+    for _line in _env_file.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _key, _, _value = _line.partition("=")
+            os.environ.setdefault(_key.strip(), _value.strip())
+
 DATA_DIR = Path(os.getenv("AUDIOLOG_DATA_DIR", BASE_DIR / "data"))
 
 # Drop audio files here (point this at a Google Drive-synced folder to ingest from Drive).
