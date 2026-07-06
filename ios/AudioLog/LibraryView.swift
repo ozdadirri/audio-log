@@ -156,7 +156,10 @@ struct LibraryView: View {
 
     private func load() async {
         do {
-            files = try await APIClient.listFiles()
+            // only reassign when content changed — a no-op assignment every poll
+            // re-renders the whole stack and dismisses any open menu/dialog
+            let fresh = try await APIClient.listFiles()
+            if fresh != files { files = fresh }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

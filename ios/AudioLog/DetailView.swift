@@ -68,11 +68,13 @@ struct DetailView: View {
                          ?? "Recording")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarTrailing) {
                 if tab == 0 {
                     Button(chinese ? "EN" : "中文") { toggleChinese() }
                         .disabled(translating)
                 }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("Re-run processing") { Task { try? await APIClient.rerun(id: fileID) } }
                     Button(detail?.memExclude == 1 ? "Include in memory" : "Exclude from memory") {
