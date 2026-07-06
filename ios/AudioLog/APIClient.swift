@@ -24,6 +24,16 @@ struct APIClient {
         URL(string: serverURLString.trimmingCharacters(in: .whitespaces))
     }
 
+    static var apiKey: String {
+        (UserDefaults.standard.string(forKey: "apiKey") ?? "")
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Media URLs carry the key as a query param: <img>/AVPlayer can't set headers.
+    private static func keySuffix(joiner: String) -> String {
+        apiKey.isEmpty ? "" : "\(joiner)key=\(apiKey.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? apiKey)"
+    }
+
     static func url(_ path: String) throws -> URL {
         guard let base = baseURL, let url = URL(string: path, relativeTo: base) else {
             throw APIError.badURL
@@ -32,15 +42,18 @@ struct APIClient {
     }
 
     static func thumbURL(for file: RecordingFile) -> URL? {
-        try? url("/api/files/\(file.id)/thumb?v=3-\(String(file.createdAt.prefix(10)))")
+        try? url("/api/files/\(file.id)/thumb?v=3-\(String(file.createdAt.prefix(10)))"
+                 + keySuffix(joiner: "&"))
     }
 
     static func audioURL(id: Int) -> URL? {
-        try? url("/api/files/\(id)/audio?v=3")
+        try? url("/api/files/\(id)/audio?v=3" + keySuffix(joiner: "&"))
     }
 
     private static func get<T: Decodable>(_ path: String) async throws -> T {
-        let (data, response) = try await URLSession.shared.data(from: url(path))
+        var request = URLRequest(url: try url(path))
+        if !apiKey.isEmpty { request.setValue(apiKey, forHTTPHeaderField: "X-API-Key") }
+        let (data, response) = try await URLSession.shared.data(for: request)
         try check(response, data: data)
         return try JSONDecoder().decode(T.self, from: data)
     }
@@ -53,6 +66,7 @@ struct APIClient {
         request.httpBody = body
         request.timeoutInterval = 600  // ask/translate can run a local LLM for minutes
         if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
+        if !apiKey.isEmpty { request.setValue(apiKey, forHTTPHeaderField: "X-API-Key") }
         let (data, response) = try await URLSession.shared.data(for: request)
         try check(response, data: data)
         return try JSONDecoder().decode(T.self, from: data)

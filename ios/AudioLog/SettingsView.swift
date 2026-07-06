@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("serverURL") private var serverURL = APIClient.defaultServer
+    @AppStorage("apiKey") private var apiKey = ""
     @State private var testResult: String?
 
     var body: some View {
@@ -18,6 +19,16 @@ struct SettingsView: View {
                 } footer: {
                     Text("The audio-log server on your Mac. Find its address with " +
                          "`ipconfig getifaddr en0` and start it with --host 0.0.0.0.")
+                }
+
+                Section {
+                    SecureField("API key (optional)", text: $apiKey)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                } header: {
+                    Text("Authentication")
+                } footer: {
+                    Text("Only needed if the server was started with AUDIOLOG_API_KEY.")
                 }
 
                 Section {

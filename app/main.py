@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -31,6 +31,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="audio-log", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.middleware("http")
+async def require_api_key(request, call_next):
+    """Optional auth: when AUDIOLOG_API_KEY is set, every /api request must
+    present it via X-API-Key header, ?key= query param, or audiolog_key cookie
+    (query/cookie exist because <img>/<audio> loads can't set headers)."""
+    if config.API_KEY and request.url.path.startswith("/api"):
+        supplied = (request.headers.get("x-api-key")
+                    or request.query_params.get("key")
+                    or request.cookies.get("audiolog_key"))
+        if supplied != config.API_KEY:
+            return JSONResponse({"detail": "invalid or missing API key"}, status_code=401)
+    return await call_next(request)
 
 
 @app.get("/")
