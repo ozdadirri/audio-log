@@ -10,11 +10,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import assistant, config, db, pipeline, thumbnail, transcode
+from . import assistant, config, db, export, pipeline, thumbnail, transcode
 from . import summarize as summarize_mod
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -129,6 +129,17 @@ def get_audio(file_id: int, request: Request):
     # inline, not attachment: browsers refuse to play <audio> marked as a download
     return FileResponse(path, filename=filename, content_disposition_type="inline",
                         media_type=AUDIO_MEDIA_TYPES.get(path.suffix.lower()))
+
+
+@app.get("/api/files/{file_id}/export")
+def export_file(file_id: int, request: Request):
+    """Self-contained HTML with summary, transcript, and embedded thumbnail."""
+    row = get_file(file_id, request)  # ownership + markdown fallback
+    thumb = thumbnail.get_or_create(row["sha256"], row["source_path"], row["created_at"])
+    html_doc = export.render(row, thumb)
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", (row.get("title") or Path(row["filename"]).stem))[:60]
+    return Response(html_doc, media_type="text/html", headers={
+        "Content-Disposition": f'attachment; filename="{stem}.html"'})
 
 
 @app.post("/api/upload")

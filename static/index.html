@@ -405,6 +405,7 @@
         <h3 id="lbTitle"></h3>
         <div class="lb-meta" id="lbMeta"></div>
         <div class="lb-actions">
+          <button class="btn ghost" id="lbExport">Export</button>
           <button class="btn ghost" id="lbRerun">Re-run</button>
           <button class="btn ghost danger" id="lbDelete">Delete</button>
           <span id="lbStatus" style="font-size:12px;color:var(--text-3)"></span>
@@ -812,6 +813,10 @@ $("langToggle").addEventListener("click", async () => {
   }
   if (openId !== null) fillLightbox(false);
 });
+$("lbExport").addEventListener("click", () => {
+  location.href = `/api/files/${openId}/export`;  // cookie carries the key
+});
+
 $("lbDelete").addEventListener("click", async () => {
   const f = files.find(f => f.id === openId);
   if (!confirm(`Delete "${f?.filename ?? "this recording"}" and its transcript, summary, and output files? This cannot be undone.`)) return;
