@@ -255,13 +255,13 @@
   .ask-sources button:hover { border-color: var(--primary); color: var(--primary); }
   .ask-close { float: right; border: 0; background: none; cursor: pointer; color: var(--text-3); font-size: 14px; }
 
-  /* ── Users admin panel ───────────────────── */
-  #usersModal {
+  /* ── Users admin panel + profile modal ───── */
+  #usersModal, #profileModal {
     position: fixed; inset: 0; z-index: 100; display: none;
     background: rgba(19, 19, 32, .8); backdrop-filter: blur(4px);
     align-items: center; justify-content: center; padding: 24px;
   }
-  #usersModal.open { display: flex; }
+  #usersModal.open, #profileModal.open { display: flex; }
   .users-card {
     background: var(--card); border-radius: 16px; padding: 24px;
     width: min(640px, 100%); max-height: 100%; overflow-y: auto; position: relative;
@@ -342,6 +342,7 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <input id="searchInput" type="search" placeholder="Search transcripts — press Enter to ask AI…">
     </div>
+    <button class="btn ghost" id="profileBtn" title="Profile">👤</button>
     <span id="busyNote" style="display:none;font-size:12px;color:var(--warn);font-weight:600">
       ⚙ processing — playback may stutter while the AI models run</span>
     <span id="uploadMsg"></span>
@@ -390,6 +391,18 @@
         <button id="langToggle" title="Translate summary">中文</button>
       </div>
       <div class="lb-body"><pre id="lbText"></pre></div>
+    </div>
+  </div>
+</div>
+
+<div id="profileModal">
+  <div class="users-card">
+    <button class="ask-close" id="profileClose">✕</button>
+    <h3>Profile</h3>
+    <div class="profile" id="profileInfo" style="margin-bottom:16px">(not signed in)</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn ghost" id="switchProfileBtn">Switch profile…</button>
+      <button class="btn" id="manageUsersBtn" style="display:none">Manage users</button>
     </div>
   </div>
 </div>
@@ -518,8 +531,8 @@ $("bulkDelete").addEventListener("click", async () => {
   refresh();
 });
 
-function promptForKey() {
-  const key = prompt("This server requires an API key:");
+function promptForKey(message = "This server requires an API key:") {
+  const key = prompt(message);
   if (!key) return;
   document.cookie = `audiolog_key=${encodeURIComponent(key.trim())}; path=/; max-age=31536000; SameSite=Lax`;
   location.reload();
@@ -940,11 +953,31 @@ async function loadMe() {
   const resp = await fetch("/api/me");
   if (!resp.ok) return;
   me = await resp.json();
-  $("profile").innerHTML = `<span>👤</span><span></span>` +
+  const chip = `<span>👤</span><span></span>` +
     (me.is_admin ? `<span class="role">admin</span>` : "");
-  $("profile").children[1].textContent = me.username;
-  if (me.is_admin) $("usersNav").style.display = "flex";
+  for (const el of [$("profile"), $("profileInfo")]) {
+    el.innerHTML = chip;
+    el.children[1].textContent = me.username;
+  }
+  $("profileBtn").textContent = `👤 ${me.username}`;
+  if (me.is_admin) {
+    $("usersNav").style.display = "flex";
+    $("manageUsersBtn").style.display = "";
+  }
 }
+
+$("profileBtn").addEventListener("click", () => $("profileModal").classList.add("open"));
+$("profileClose").addEventListener("click", () => $("profileModal").classList.remove("open"));
+$("profileModal").addEventListener("click", (e) => {
+  if (e.target === $("profileModal")) $("profileModal").classList.remove("open");
+});
+$("switchProfileBtn").addEventListener("click", () =>
+  promptForKey("Enter the API key of the profile to switch to:"));
+$("manageUsersBtn").addEventListener("click", () => {
+  $("profileModal").classList.remove("open");
+  $("usersModal").classList.add("open");
+  loadUsers();
+});
 
 async function loadUsers() {
   const users = await (await fetch("/api/users")).json();
