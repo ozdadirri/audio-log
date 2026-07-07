@@ -43,13 +43,13 @@ it from the browser, an installable phone app, or the native iOS app.
 | Full-featured dashboard in any browser | SwiftUI app in `ios/`, talks to your server | "Add to Home Screen" from Safari |
 
 <p align="center">
-  <img src="images/audio-log5.PNG" width="24%" alt="Recording detail with export menu (PDF/Markdown/HTML)">
+  <img src="images/audio-log5.PNG" width="22%" alt="Recording detail with export menu (PDF/Markdown/HTML)">
   &nbsp;
-  <img src="images/audio-log6.PNG" width="24%" alt="Translate a summary into 12 languages">
+  <img src="images/audio-log6.PNG" width="22%" alt="Translate a summary into 12 languages">
   &nbsp;
-  <img src="images/audio-log2.PNG" width="24%" alt="Conversational Ask AI with cited sources">
+  <img src="images/audio-log2.PNG" width="22%" alt="Conversational Ask AI with cited sources">
   &nbsp;
-  <img src="images/audio-log8.PNG" width="24%" alt="Profile — admin, users, and trash">
+  <img src="images/audio-log8.PNG" width="22%" alt="Profile — admin, users, and trash">
 </p>
 
 ## Requirements
