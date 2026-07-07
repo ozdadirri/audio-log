@@ -1,43 +1,63 @@
 # audio-log
 
-Local audio transcription + digest pipeline with a Google Photos-style web UI:
-drop audio files into a watched folder (or upload via the browser), get a
-timestamped transcript and a point-form summary, browse everything as a grid of
-spectrogram thumbnails, and ask an AI assistant questions about your recordings.
+**A self-hosted, Google Photos-style library for your voice.** Drop audio into a
+watched folder (or record / upload from any device), and audio-log transcribes
+it, writes an AI summary, titles and tags it, renders a color-coded spectrogram
+thumbnail, and makes everything searchable — with a long-term memory that
+connects the dots across your whole archive. Runs entirely on your own Mac; use
+it from the browser, an installable phone app, or the native iOS app.
 
-Pipeline: **watched input dir → mlx-whisper (transcribe) → Ollama (summarize) → SQLite + markdown output dir**
-
-Everything runs locally — no cloud services.
-
-![Library — a Google Photos-style grid of color-coded spectrogram thumbnails](images/demo1.png)
-
-![Preview — audio player, structured summary, transcript, and Chinese translation toggle](images/demo2.png)
+![Library — color-coded spectrogram thumbnails, day groups, user and tag filters](images/audio-log-web.png)
 
 ## Key features
 
 - 🎨 **Color-coded spectrogram thumbnails** — every recording becomes a square
-  "photo" of its own sound. The texture is the audio (speech, pauses, music);
-  the color encodes the day it was added — same day, same hue; different days
-  land far apart on the color wheel — so you can tell sessions apart at a glance.
-- 🖼️ **Google Photos-ish library** — recordings grouped by day in a tile grid,
-  hover for details, click for a full preview, multi-select tiles to delete in
-  one go, drag-and-drop anywhere to upload.
+  "photo" of its own sound. The texture is the audio; the color encodes the day
+  it was added, so sessions are distinguishable at a glance.
 - 🎙️ **Transcription** — mlx-whisper (Apple Silicon) produces timestamped
-  transcripts that highlight and auto-scroll in sync with playback; click any
-  line to jump the audio there.
-- 📝 **Summaries** — every recording is digested by a local Ollama model into
-  TL;DR, key points, decisions, action items, and open questions.
-- 🌐 **EN ⇄ 中文 translation** — one click on the summary tab translates the
-  digest to Simplified Chinese (generated once, cached forever).
-- 🔍 **Search + Ask AI** — full-text search across all transcripts as you
-  type; press Enter to ask a question and get a grounded answer with cited,
-  clickable sources.
+  transcripts that highlight and auto-scroll in sync with playback; tap any line
+  to jump the audio there.
+- 📝 **AI summaries, titles & tags** — every recording is digested by a local
+  Ollama model (TL;DR, key points, decisions, action items) and gets a
+  descriptive title and 1–3 filterable tags.
+- 🌐 **Translate into 12 languages** — summaries and the memory translate to
+  中文, Español, Français, Deutsch, 日本語, 한국어, and more, cached per language.
+- 🔍 **Semantic search + Ask AI** — full-text *and* embedding-based search; press
+  Enter to ask a question and get a grounded, conversational answer with cited,
+  tappable sources.
+- 📖 **Long-term memory** — distills your whole library into a living document,
+  auto-updated as new recordings come in, and feeds Ask AI so it understands the
+  big picture. Exclude any recording; translate the memory.
+- 📤 **Export** — any recording or the memory as **PDF, Markdown, or HTML**, in
+  whichever language you're viewing.
+- 👥 **Multi-user** — the API key is the login; an admin sees everything and
+  manages users, while each user sees only their own recordings (search, Ask AI,
+  and memory are all scoped per user).
+- 🗑️ **Trash with 30-day restore**, 🎙️ **in-browser & native recording**,
+  🎚️ **runtime model picker**, and drag-and-drop / multi-select throughout.
+
+## Three ways to use it
+
+| Web app | Native iPhone / iPad app | Installable PWA |
+|---|---|---|
+| Full-featured dashboard in any browser | SwiftUI app in `ios/`, talks to your server | "Add to Home Screen" from Safari |
+
+<p align="center">
+  <img src="images/audio-log5.PNG" width="24%" alt="Recording detail with export menu (PDF/Markdown/HTML)">
+  &nbsp;
+  <img src="images/audio-log6.PNG" width="24%" alt="Translate a summary into 12 languages">
+  &nbsp;
+  <img src="images/audio-log2.PNG" width="24%" alt="Conversational Ask AI with cited sources">
+  &nbsp;
+  <img src="images/audio-log8.PNG" width="24%" alt="Profile — admin, users, and trash">
+</p>
 
 ## Requirements
 
 - Apple Silicon Mac (mlx-whisper)
 - `ffmpeg` (`brew install ffmpeg`)
-- [Ollama](https://ollama.com) running with the summary model pulled (default `qwen3.6:27b`)
+- [Ollama](https://ollama.com) running with a model pulled (default `qwen3.6:27b`;
+  `nomic-embed-text` for semantic search)
 
 ## Run
 
@@ -51,140 +71,112 @@ python3 -m venv .venv
 ```
 
 Open http://localhost:8300. Files dropped into `data/input/` (or uploaded /
-drag-and-dropped onto the page) are processed automatically; results land in
-`data/output/<name>-<hash>/` as `transcript.md`, `summary.md`, `meta.json`, and
-are also stored in SQLite for search.
+recorded / drag-and-dropped) are processed automatically; results are stored in
+SQLite and written to `data/output/<name>-<hash>/` as `transcript.md`,
+`summary.md`, `meta.json`.
 
 The first transcription downloads the Whisper model (~1.6 GB) from Hugging Face
 into `~/.cache/huggingface/`.
 
-## Web UI
+## Native iOS app
 
-- **Library grid** — recordings grouped by day, each shown as a square
-  spectrogram thumbnail. The thumbnail's color encodes the ingest date (same
-  day = same hue, different days = clearly different hues); the texture is the
-  audio itself.
-- **Preview** — click a tile: audio player, summary, and a transcript that
-  highlights and scrolls in sync with playback. Click a transcript line to
-  seek. Space toggles play/pause.
-- **Summary translation** — 中文/EN toggle on the Summary tab; the Chinese
-  version is generated once by Ollama and cached.
-- **Search** — the top bar full-text searches filenames, transcripts, and
-  summaries as you type.
-- **Ask AI** — press Enter in the search bar to ask a question; the assistant
-  retrieves the most relevant transcript excerpts and answers with cited,
-  clickable sources.
-- **Delete** — from the preview, or select multiple tiles via their check
-  circles and use the Delete button that appears in the header.
-- **Mic recording** — currently disabled (commented out in
-  `static/index.html`): a Chrome/macOS audio-service crash triggered by ending
-  mic captures breaks all browser audio until restart. `/mictest` is a
-  standalone diagnostic page — Test 4's beep failing means the browser's audio
-  output is wedged (fix: reboot or `sudo killall coreaudiod`), not an app bug.
+A full SwiftUI client lives in `ios/AudioLog.xcodeproj` (iOS 17+, Xcode 16+):
+library, synced-transcript player, translation, Ask AI chat, memory, users,
+trash, native mic recording, and export via the share sheet.
 
-## iPhone / iPad app (PWA)
+1. Open the project in Xcode → **Signing & Capabilities** → select your Team.
+2. Run the server with `--host 0.0.0.0`, then ⌘R onto your device.
+3. In the app: **Settings** → set the server URL (and API key, if the server
+   uses one) → **Test connection**.
 
-The web UI installs as an app on iOS/iPadOS:
-
-1. Start the server with `--host 0.0.0.0` (see Run above) and find your Mac's
-   address: `ipconfig getifaddr en0` (e.g. `192.168.1.20`).
-2. On the iPhone/iPad (same WiFi), open `http://192.168.1.20:8300` in Safari.
-3. Tap **Share → Add to Home Screen**. You get a full-screen AudioLog app with
-   its own icon.
-
-Everything works from the device — browsing, playback, upload, search, Ask AI,
-translation — **except mic recording**: browsers only allow microphone access
-on HTTPS or localhost, and the LAN connection is plain HTTP. Record with the
-Voice Memos app and share/upload the file instead, or record on the Mac.
+Prefer no build? The web UI installs as a **PWA**: open the server's address in
+Safari on the phone and tap **Share → Add to Home Screen**.
 
 ## API
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/files` | list recordings |
-| GET | `/api/files/{id}` | detail incl. transcript + summary |
-| GET | `/api/files/{id}/thumb` | spectrogram PNG (cached) |
-| GET | `/api/files/{id}/audio` | playable audio (transcoded to m4a if needed) |
-| POST | `/api/files/{id}/translate` | Chinese summary (generated once, cached) |
+| GET | `/api/files` | list recordings (scoped to the caller; admin sees all) |
+| GET | `/api/files/{id}` | detail incl. transcript, summary, tags |
+| GET | `/api/files/{id}/thumb` · `/audio` | spectrogram PNG · playable audio (m4a-transcoded if needed) |
+| POST | `/api/files/{id}/translate?lang=` | translate the summary (cached per language) |
+| GET | `/api/files/{id}/export?format=&lang=` | export as `md` / `html` / `pdf` |
 | POST | `/api/files/{id}/rerun` | reprocess |
-| DELETE | `/api/files/{id}` | delete audio, outputs, caches, DB row |
+| DELETE | `/api/files/{id}` · POST `/restore` | trash / restore |
 | POST | `/api/upload` | upload an audio file |
-| GET | `/api/search?q=` | full-text search (FTS5) |
-| POST | `/api/ask` | `{"question": …}` → grounded answer + sources |
-| GET | `/api/me` | current user (derived from the API key) |
-| GET/POST | `/api/users` | admin: list / create users (create returns the new key once) |
-| DELETE | `/api/users/{id}` | admin: delete user; their files move to admin |
+| GET | `/api/search?q=` · POST `/api/ask` | search · grounded conversational answer |
+| GET/POST/DELETE | `/api/memory` … `/build` `/translate` `/export` | long-term memory |
+| GET | `/api/languages` | supported translation languages |
+| GET | `/api/trash` | trashed recordings |
+| GET/POST/DELETE | `/api/users` … | admin: manage users |
+| GET/POST | `/api/models` · `/api/model` | list / select the Ollama summary model |
 | GET | `/api/config` | effective configuration |
+
+All `/api` requests require the API key when `AUDIOLOG_API_KEY` is set (header
+`X-API-Key`, `?key=`, or cookie); the key identifies the user.
+
+## Users
+
+The API key is the login. On first start the configured `AUDIOLOG_API_KEY`
+becomes the **admin** account (all recordings + user management). Create more
+users from the **Users** panel — each gets their own key and a private library;
+search, Ask AI, and memory are scoped per user. Watched-folder files belong to
+the admin.
 
 ## Google Drive sync
 
-Install [Google Drive for desktop](https://www.google.com/drive/download/),
-then wire two folders in `.env`:
+Install [Google Drive for desktop](https://www.google.com/drive/download/), then
+wire two folders in `.env`:
 
 ```bash
 AUDIOLOG_EXTRA_INPUT_DIRS=/Users/<you>/Library/CloudStorage/GoogleDrive-<account>/My Drive/AudioLog/inbox
 AUDIOLOG_PUBLISH_DIR=/Users/<you>/Library/CloudStorage/GoogleDrive-<account>/My Drive/AudioLog/digests
 ```
 
-Audio dropped into the Drive `inbox` folder (from any device, including the
-Drive mobile app) is transcribed automatically, and every finished job's
-`transcript.md` / `summary.md` / `meta.json` are mirrored to `digests`, which
-Drive syncs back to all your devices.
+Audio dropped into the Drive `inbox` (from any device) is transcribed
+automatically, and each finished job's outputs are mirrored to `digests`, which
+Drive syncs back everywhere.
 
 ## Remote access & HTTPS (Tailscale)
 
 Install [Tailscale](https://tailscale.com) on the Mac and your devices (same
 account) and the server is reachable anywhere at
 `http://<your-mac>.<tailnet>.ts.net:8300` — private to your tailnet, no ports
-opened. Do **not** use Tailscale *Funnel* for this server (it would expose the
-API to the public internet).
+opened. Do **not** use Tailscale *Funnel* for this server (it would expose an
+unauthenticated API publicly — set `AUDIOLOG_API_KEY` at minimum).
 
-To add HTTPS (required for mic recording in the browser/PWA away from
-localhost), run once on the Mac:
-
-```bash
-tailscale serve --bg 8300
-```
-
-Tailscale then proxies `https://<your-mac>.<tailnet>.ts.net` (no port) to the
-server with a valid certificate. Re-add the PWA to your home screen from the
-https URL and the in-browser Record button works remotely. `tailscale serve
-status` shows the config; `tailscale serve reset` removes it.
-
-## Users
-
-Each user has a username and an API key — the key is the login. On first start
-the configured `AUDIOLOG_API_KEY` becomes the **admin** account, which sees all
-recordings and manages users via the sidebar **Users** panel (or the API).
-Other users see only recordings they uploaded or recorded themselves; search
-and Ask AI are scoped the same way. Watched-folder files belong to the admin.
+For HTTPS (needed for in-browser mic recording away from localhost), run
+`tailscale serve --bg 8300`; Tailscale then serves
+`https://<your-mac>.<tailnet>.ts.net` with a valid certificate.
 
 ## Configuration (env vars)
 
+Values can also be set in a git-ignored `.env` file in the project root.
+
 | Variable | Default | Meaning |
 |---|---|---|
-| `AUDIOLOG_INPUT_DIR` | `data/input` | watched folder (e.g. a Drive-synced dir) |
+| `AUDIOLOG_INPUT_DIR` | `data/input` | watched folder |
 | `AUDIOLOG_OUTPUT_DIR` | `data/output` | where results are written |
 | `AUDIOLOG_WHISPER_MODEL` | `mlx-community/whisper-large-v3-turbo` | HF repo of the mlx whisper model |
-| `AUDIOLOG_OLLAMA_MODEL` | `qwen3.6:27b` | Ollama model for summaries/translation/assistant |
+| `AUDIOLOG_OLLAMA_MODEL` | `qwen3.6:27b` | Ollama model (also selectable at runtime in the UI) |
+| `AUDIOLOG_EMBED_MODEL` | `nomic-embed-text` | Ollama embedding model for semantic search |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama server |
+| `AUDIOLOG_API_KEY` | *(empty = auth off)* | require this key on all `/api` requests; becomes the admin login. Generate with `openssl rand -hex 16`. |
 | `AUDIOLOG_EXTRA_INPUT_DIRS` | *(empty)* | comma-separated additional watched folders |
-| `AUDIOLOG_PUBLISH_DIR` | *(empty)* | mirror each job's outputs (transcript/summary/meta) here |
+| `AUDIOLOG_PUBLISH_DIR` | *(empty)* | mirror each job's outputs here |
 | `AUDIOLOG_SCAN_INTERVAL` | `3` | seconds between input dir scans |
-| `AUDIOLOG_API_KEY` | *(empty = auth off)* | require this key on all `/api` requests (`X-API-Key` header, `?key=`, or cookie). The web UI prompts for it; the iOS app has a Settings field. Generate one with `openssl rand -hex 16`. |
 | `AUDIOLOG_DATA_DIR` | `./data` | base dir for db, caches, default input/output |
 
 ## Data layout
 
 ```
 data/
-  audiolog.db      # SQLite: job rows, transcripts, summaries, FTS5 index
+  audiolog.db      # SQLite: recordings, transcripts, summaries, tags, users,
+                   #   memory, translations, embedding vectors, FTS5 index
   input/           # watched folder (source audio stays here)
   output/          # <name>-<hash>/ transcript.md, summary.md, meta.json
   thumbs/          # cached spectrogram PNGs (by content hash + date hue)
   transcode/       # cached m4a copies for browser playback
 ```
 
-Deleting `thumbs/` or `transcode/` is safe — they regenerate on demand. The
-markdown files in `output/` are re-imported into SQLite at startup if the DB
-loses them (and vice versa, the DB is the source for the UI).
+Deleting `thumbs/` or `transcode/` is safe — they regenerate on demand.
