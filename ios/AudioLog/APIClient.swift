@@ -104,13 +104,21 @@ struct APIClient {
         let _: Reset = try await send("/api/memory", method: "DELETE")
     }
 
-    static func memoryTranslate() async throws -> String {
-        struct Zh: Decodable {
-            let contentZh: String
-            enum CodingKeys: String, CodingKey { case contentZh = "content_zh" }
-        }
-        let zh: Zh = try await send("/api/memory/translate", method: "POST")
-        return zh.contentZh
+    struct Language: Codable, Identifiable, Hashable {
+        let code: String
+        let label: String
+        var id: String { code }
+    }
+
+    struct Translated: Decodable { let text: String }
+
+    static func languages() async throws -> [Language] {
+        try await get("/api/languages")
+    }
+
+    static func memoryTranslate(lang: String) async throws -> String {
+        let r: Translated = try await send("/api/memory/translate?lang=\(lang)", method: "POST")
+        return r.text
     }
 
     static func listTrash() async throws -> [TrashItem] {
@@ -158,9 +166,9 @@ struct APIClient {
         let _: Status = try await send("/api/files/\(id)/rerun", method: "POST")
     }
 
-    static func translate(id: Int) async throws -> String {
-        let response: TranslateResponse = try await send("/api/files/\(id)/translate", method: "POST")
-        return response.summaryZh
+    static func translate(id: Int, lang: String) async throws -> String {
+        let r: Translated = try await send("/api/files/\(id)/translate?lang=\(lang)", method: "POST")
+        return r.text
     }
 
     static func ask(question: String, history: [ChatTurn] = []) async throws -> AskResponse {

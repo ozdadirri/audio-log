@@ -188,12 +188,17 @@ def build_memory(request: Request):
     return memory.build(request.state.user)
 
 
+@app.get("/api/languages")
+def languages():
+    return [{"code": c, "label": label} for c, label, _ in summarize_mod.LANGUAGES]
+
+
 @app.post("/api/memory/translate")
-def translate_memory(request: Request):
-    zh = memory.translate(request.state.user)
-    if zh is None:
+def translate_memory(request: Request, lang: str = "zh"):
+    text = memory.translate(request.state.user, lang)
+    if text is None:
         raise HTTPException(409, "no memory to translate yet")
-    return {"content_zh": zh}
+    return {"content_zh": text, "text": text, "lang": lang}
 
 
 @app.delete("/api/memory")
@@ -246,6 +251,7 @@ def delete_user(user_id: int, request: Request):
 @app.post("/api/files/{file_id}/rerun")
 def rerun(file_id: int, request: Request):
     _fetch_owned(file_id, request)
+    db.clear_translations("summary", file_id)  # stale once re-summarized
     db.set_status(file_id, "pending")
     return {"status": "pending"}
 
@@ -277,16 +283,17 @@ def list_trash(request: Request):
 
 
 @app.post("/api/files/{file_id}/translate")
-def translate(file_id: int, request: Request):
-    """Chinese translation of the summary, generated once and cached in the DB."""
+def translate(file_id: int, request: Request, lang: str = "zh"):
+    """Translate the summary into `lang`, generated once and cached per language."""
     row = get_file(file_id, request)  # reuses the markdown-file fallback for old rows
-    if row.get("summary_zh"):
-        return {"summary_zh": row["summary_zh"]}
     if not row.get("summary"):
         raise HTTPException(409, "summary not ready yet")
-    zh = summarize_mod.translate_zh(row["summary"])
-    db.set_summary_zh(file_id, zh)
-    return {"summary_zh": zh}
+    cached = db.get_translation("summary", file_id, lang)
+    if cached is None:
+        cached = summarize_mod.translate(row["summary"], lang)
+        db.set_translation("summary", file_id, lang, cached)
+    # summary_zh key kept for older clients that expect it
+    return {"summary_zh": cached, "text": cached, "lang": lang}
 
 
 @app.post("/api/backfill-titles")

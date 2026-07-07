@@ -51,6 +51,16 @@ CREATE TABLE IF NOT EXISTS memories (
     last_file_id INTEGER NOT NULL DEFAULT 0,
     updated_at   TEXT NOT NULL
 );
+
+-- Cached translations. kind='summary' -> ref_id is file_id;
+-- kind='memory' -> ref_id is user_id.
+CREATE TABLE IF NOT EXISTS translations (
+    kind    TEXT NOT NULL,
+    ref_id  INTEGER NOT NULL,
+    lang    TEXT NOT NULL,
+    text    TEXT NOT NULL,
+    PRIMARY KEY (kind, ref_id, lang)
+);
 """
 
 VALID_STATUSES = {"pending", "transcribing", "summarizing", "done", "error"}
@@ -276,6 +286,8 @@ def set_memory(user_id: int, content: str, last_file_id: int):
             "last_file_id = excluded.last_file_id, updated_at = excluded.updated_at",
             (user_id, content, last_file_id, _now()),
         )
+        conn.execute("DELETE FROM translations WHERE kind = 'memory' AND ref_id = ?",
+                     (user_id,))
 
 
 def set_memory_zh(user_id: int, content_zh: str):
@@ -340,6 +352,28 @@ def set_tags(file_id: int, tags: str):
 def set_summary_zh(file_id: int, text: str):
     with connect() as conn:
         conn.execute("UPDATE files SET summary_zh = ? WHERE id = ?", (text, file_id))
+
+
+def get_translation(kind: str, ref_id: int, lang: str) -> str | None:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT text FROM translations WHERE kind = ? AND ref_id = ? AND lang = ?",
+            (kind, ref_id, lang),
+        ).fetchone()
+        return row["text"] if row else None
+
+
+def set_translation(kind: str, ref_id: int, lang: str, text: str):
+    with connect() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO translations (kind, ref_id, lang, text) "
+            "VALUES (?, ?, ?, ?)", (kind, ref_id, lang, text),
+        )
+
+
+def clear_translations(kind: str, ref_id: int):
+    with connect() as conn:
+        conn.execute("DELETE FROM translations WHERE kind = ? AND ref_id = ?", (kind, ref_id))
 
 
 def _fts_query(q: str, any_term: bool = False) -> str:
