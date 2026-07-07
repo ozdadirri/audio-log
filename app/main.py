@@ -132,15 +132,45 @@ def get_audio(file_id: int, request: Request):
                         media_type=AUDIO_MEDIA_TYPES.get(path.suffix.lower()))
 
 
+def _export_response(body: str, media_type: str, stem: str, ext: str, inline: bool):
+    disposition = "inline" if inline else "attachment"
+    return Response(body, media_type=media_type, headers={
+        "Content-Disposition": f'{disposition}; filename="{stem}.{ext}"'})
+
+
 @app.get("/api/files/{file_id}/export")
-def export_file(file_id: int, request: Request):
-    """Self-contained HTML with summary, transcript, and embedded thumbnail."""
+def export_file(file_id: int, request: Request, format: str = "html", lang: str = "en"):
+    """Export a recording as markdown, HTML, or a print-to-PDF page. `lang` != en
+    exports the translated summary (the transcript stays in its spoken language)."""
     row = get_file(file_id, request)  # ownership + markdown fallback
-    thumb = thumbnail.get_or_create(row["sha256"], row["source_path"], row["created_at"])
-    html_doc = export.render(row, thumb)
+    if lang != "en" and row.get("summary"):
+        translated = db.get_translation("summary", file_id, lang)
+        if translated is None:
+            translated = summarize_mod.translate(row["summary"], lang)
+            db.set_translation("summary", file_id, lang, translated)
+        row = {**row, "summary": translated}
     stem = re.sub(r"[^A-Za-z0-9._-]+", "_", (row.get("title") or Path(row["filename"]).stem))[:60]
-    return Response(html_doc, media_type="text/html", headers={
-        "Content-Disposition": f'attachment; filename="{stem}.html"'})
+    if format == "md":
+        return _export_response(export.render_markdown(row), "text/markdown", stem, "md", False)
+    thumb = thumbnail.get_or_create(row["sha256"], row["source_path"], row["created_at"])
+    # pdf: served inline with an auto-print script so the browser saves as PDF
+    html_doc = export.render(row, thumb, print_dialog=(format == "pdf"))
+    return _export_response(html_doc, "text/html", stem, "html", inline=(format == "pdf"))
+
+
+@app.get("/api/memory/export")
+def export_memory(request: Request, format: str = "html", lang: str = "en"):
+    """Export the long-term memory as markdown, HTML, or a print-to-PDF page."""
+    user = request.state.user
+    row = db.get_memory(user["id"])
+    content = row["content"] if row else ""
+    if lang != "en" and content:
+        content = memory.translate(user, lang) or content
+    if format == "md":
+        return _export_response(export.render_memory_markdown(content),
+                                "text/markdown", "memory", "md", False)
+    html_doc = export.render_memory(content, print_dialog=(format == "pdf"))
+    return _export_response(html_doc, "text/html", "memory", "html", inline=(format == "pdf"))
 
 
 @app.post("/api/upload")

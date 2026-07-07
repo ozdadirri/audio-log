@@ -80,6 +80,11 @@ struct DetailView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
+                ExportMenu(endpoint: "/api/files/\(fileID)/export",
+                           name: detail?.title ?? detail?.filename ?? "recording",
+                           lang: lang)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("Re-run processing") { Task { try? await APIClient.rerun(id: fileID) } }
                     Button(detail?.memExclude == 1 ? "Include in memory" : "Exclude from memory") {

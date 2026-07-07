@@ -58,6 +58,9 @@ struct MemoryView: View {
                     }
                     Button(buildLabel) { build() }
                         .disabled(building || (status?.pending ?? 0) == 0)
+                    if status?.content != nil {
+                        ExportMenu(endpoint: "/api/memory/export", name: "memory", lang: lang)
+                    }
                     Menu {
                         Button("Reset memory", role: .destructive) { confirmReset = true }
                     } label: { Image(systemName: "ellipsis.circle") }

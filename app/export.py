@@ -49,7 +49,7 @@ def _md_to_html(md: str) -> str:
     return "\n".join(out)
 
 
-def render(row: dict, thumb: Path | None) -> str:
+def render(row: dict, thumb: Path | None, *, print_dialog: bool = False) -> str:
     title = html.escape(row.get("title") or row["filename"])
     thumb_tag = ""
     if thumb and thumb.exists():
@@ -79,5 +79,51 @@ def render(row: dict, thumb: Path | None) -> str:
 {transcript}
 <hr>
 <div class="meta">Exported from audio-log</div>
+{_PRINT_SCRIPT if print_dialog else ""}
 </body></html>
 """
+
+
+# Opening this HTML pops the browser's print dialog (used for the "PDF" option,
+# where the user saves as PDF — no server-side PDF engine required).
+_PRINT_SCRIPT = "<script>window.onload=()=>setTimeout(()=>window.print(),300)</script>"
+
+
+def render_markdown(row: dict) -> str:
+    """Plain markdown export of a recording."""
+    lines = [f"# {row.get('title') or row['filename']}", ""]
+    meta = [
+        f"File: {row['filename']}",
+        f"Date: {row.get('created_at', '')[:19].replace('T', ' ')}",
+    ]
+    if row.get("duration"):
+        meta.append(f"Duration: {int(row['duration'] // 60)}:{int(row['duration'] % 60):02d}")
+    if row.get("language"):
+        meta.append(f"Language: {row['language']}")
+    if row.get("tags"):
+        meta.append("Tags: " + " ".join("#" + t for t in row["tags"].split(",") if t))
+    lines += ["> " + m for m in meta]
+    lines += ["", "## Summary", "", row.get("summary") or "(no summary)",
+              "", "## Transcript", "", row.get("transcript") or "(no transcript)"]
+    return "\n".join(lines)
+
+
+def render_memory(content: str, *, print_dialog: bool = False) -> str:
+    """Self-contained HTML export of the memory document."""
+    body = _md_to_html(content or "(no memory yet)")
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory</title><style>{STYLE}</style></head>
+<body>
+<h1>Memory</h1>
+{body}
+<hr>
+<div class="meta">Exported from audio-log</div>
+{_PRINT_SCRIPT if print_dialog else ""}
+</body></html>
+"""
+
+
+def render_memory_markdown(content: str) -> str:
+    return f"# Memory\n\n{content or '(no memory yet)'}\n"
