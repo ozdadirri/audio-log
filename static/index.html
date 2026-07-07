@@ -211,6 +211,7 @@
     font-size: 12px; background: var(--card); color: var(--text-2); cursor: pointer;
   }
   .lang-select.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .export-select { cursor: pointer; font: inherit; font-size: 14px; }
   .lb-body { overflow-y: auto; padding: 18px 24px 24px; flex: 1; }
   .lb-body pre {
     white-space: pre-wrap; font-family: inherit; font-size: 13.5px;
@@ -421,7 +422,12 @@
         <h3 id="lbTitle"></h3>
         <div class="lb-meta" id="lbMeta"></div>
         <div class="lb-actions">
-          <button class="btn ghost" id="lbExport">Export</button>
+          <select class="btn ghost export-select" id="lbExport" title="Export">
+            <option value="" selected>Export…</option>
+            <option value="pdf">PDF</option>
+            <option value="md">Markdown</option>
+            <option value="html">HTML</option>
+          </select>
           <button class="btn ghost" id="lbMemX" title="Include or exclude this recording from memory builds"></button>
           <button class="btn ghost" id="lbRerun">Re-run</button>
           <button class="btn ghost danger" id="lbDelete">Delete</button>
@@ -460,6 +466,12 @@
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <button class="btn" id="memoryBuild">Update memory</button>
       <select class="lang-select" id="memoryLang" style="margin:0"></select>
+      <select class="btn ghost export-select" id="memoryExport" title="Export">
+        <option value="" selected>Export…</option>
+        <option value="pdf">PDF</option>
+        <option value="md">Markdown</option>
+        <option value="html">HTML</option>
+      </select>
       <button class="btn ghost danger" id="memoryReset">Reset</button>
     </div>
     <div class="md" id="memoryContent"></div>
@@ -882,8 +894,16 @@ $("langToggle").addEventListener("change", async (e) => {
   }
   if (openId !== null) fillLightbox(false);
 });
-$("lbExport").addEventListener("click", () => {
-  location.href = `/api/files/${openId}/export`;  // cookie carries the key
+function doExport(url, format, lang, select) {
+  const q = `?format=${format}&lang=${lang || "en"}`;
+  // md/html download; pdf opens the styled page and pops the print dialog
+  if (format === "pdf") window.open(url + q, "_blank");
+  else location.href = url + q;  // cookie carries the key
+  if (select) select.value = "";
+}
+
+$("lbExport").addEventListener("change", (e) => {
+  if (e.target.value) doExport(`/api/files/${openId}/export`, e.target.value, sumLang, e.target);
 });
 
 $("lbMemX").addEventListener("click", async () => {
@@ -1341,6 +1361,10 @@ $("memoryLang").addEventListener("change", async (e) => {
     memTransCache.set(memLang, resp.ok ? data.text : "⚠ " + data.detail);
     renderMemoryContent();
   }
+});
+
+$("memoryExport").addEventListener("change", (e) => {
+  if (e.target.value) doExport("/api/memory/export", e.target.value, memLang, e.target);
 });
 
 $("memoryNav").addEventListener("click", (e) => { e.preventDefault(); openMemory(); });
