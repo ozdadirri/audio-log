@@ -3,14 +3,16 @@ import SwiftUI
 struct MemoryView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var status: MemoryStatus?
-    @State private var chinese = false
+    @State private var lang = "en"
+    @State private var translated: String?
     @State private var building = false
     @State private var translating = false
     @State private var confirmReset = false
     @State private var errorMessage: String?
+    @State private var languages: [APIClient.Language] = [.init(code: "en", label: "English")]
 
     private var shownText: String? {
-        chinese ? status?.contentZh : status?.content
+        lang == "en" ? status?.content : translated
     }
 
     var body: some View {
@@ -47,7 +49,11 @@ struct MemoryView: View {
                 ToolbarItem(placement: .topBarLeading) { Button("Close") { dismiss() } }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if status?.content != nil {
-                        Button(chinese ? "EN" : "中文") { toggleChinese() }
+                        Menu {
+                            Picker("Language", selection: $lang) {
+                                ForEach(languages) { Text($0.label).tag($0.code) }
+                            }
+                        } label: { Image(systemName: "globe") }
                             .disabled(translating || building)
                     }
                     Button(buildLabel) { build() }
@@ -62,6 +68,7 @@ struct MemoryView: View {
                 Button("Reset", role: .destructive) { reset() }
             }
             .task { await load() }
+            .onChange(of: lang) { _, _ in loadTranslation() }
         }
     }
 
@@ -81,6 +88,7 @@ struct MemoryView: View {
         do {
             status = try await APIClient.memoryStatus()
             errorMessage = nil
+            if let langs = try? await APIClient.languages() { languages = langs }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -92,6 +100,8 @@ struct MemoryView: View {
             defer { building = false }
             do {
                 status = try await APIClient.memoryBuild()
+                lang = "en"      // rebuilt content invalidates translations
+                translated = nil
                 errorMessage = nil
             } catch {
                 errorMessage = error.localizedDescription
@@ -99,21 +109,14 @@ struct MemoryView: View {
         }
     }
 
-    private func toggleChinese() {
-        chinese.toggle()
-        guard chinese, status?.contentZh == nil else { return }
+    private func loadTranslation() {
+        guard lang != "en" else { return }
+        translated = nil
         translating = true
         Task {
             defer { translating = false }
-            do {
-                let zh = try await APIClient.memoryTranslate()
-                status = MemoryStatus(content: status?.content, contentZh: zh,
-                                      updatedAt: status?.updatedAt,
-                                      pending: status?.pending ?? 0)
-            } catch {
-                errorMessage = error.localizedDescription
-                chinese = false
-            }
+            do { translated = try await APIClient.memoryTranslate(lang: lang) }
+            catch { errorMessage = error.localizedDescription; lang = "en" }
         }
     }
 
@@ -121,7 +124,8 @@ struct MemoryView: View {
         Task {
             do {
                 try await APIClient.memoryReset()
-                chinese = false
+                lang = "en"
+                translated = nil
                 await load()
             } catch {
                 errorMessage = error.localizedDescription

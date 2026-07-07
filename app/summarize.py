@@ -54,15 +54,37 @@ def _ollama_chat(prompt: str) -> str:
     return resp.json()["message"]["content"].strip()
 
 
-TRANSLATE_ZH_PROMPT = """Translate the following markdown digest into Simplified Chinese.
-Translate the section headings naturally and keep the markdown structure exactly.
+# code -> (native label, English name for the prompt). English is the original.
+LANGUAGES = [
+    ("en", "English", "English"),
+    ("zh", "中文", "Simplified Chinese"),
+    ("es", "Español", "Spanish"),
+    ("fr", "Français", "French"),
+    ("de", "Deutsch", "German"),
+    ("ja", "日本語", "Japanese"),
+    ("ko", "한국어", "Korean"),
+    ("pt", "Português", "Portuguese"),
+    ("it", "Italiano", "Italian"),
+    ("hi", "हिन्दी", "Hindi"),
+    ("ar", "العربية", "Arabic"),
+    ("vi", "Tiếng Việt", "Vietnamese"),
+]
+_LANG_NAMES = {code: english for code, _, english in LANGUAGES}
+
+TRANSLATE_PROMPT = """Translate the following markdown into {language}.
+Translate section headings naturally and keep the markdown structure exactly.
 Output only the translation, nothing else.
 
 {text}"""
 
 
-def translate_zh(text: str) -> str:
-    return _ollama_chat(TRANSLATE_ZH_PROMPT.format(text=text))
+def translate(text: str, lang: str) -> str:
+    language = _LANG_NAMES.get(lang, "Simplified Chinese")
+    return _ollama_chat(TRANSLATE_PROMPT.format(language=language, text=text))
+
+
+def translate_zh(text: str) -> str:  # kept for backward compatibility
+    return translate(text, "zh")
 
 
 TITLE_PROMPT = """Based on this digest of an audio recording, write a short descriptive

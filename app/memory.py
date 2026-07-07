@@ -44,16 +44,18 @@ def status(user: dict) -> dict:
     }
 
 
-def translate(user: dict) -> str | None:
-    """Chinese version of the memory, generated once per build and cached."""
+def translate(user: dict, lang: str = "zh") -> str | None:
+    """Memory translated into `lang`, generated once per (user, language) and cached.
+    Cache is keyed on the memory's content so a rebuild invalidates it."""
     row = db.get_memory(user["id"])
     if not row or not row["content"]:
         return None
-    if row.get("content_zh"):
-        return row["content_zh"]
-    zh = summarize.translate_zh(row["content"])
-    db.set_memory_zh(user["id"], zh)
-    return zh
+    cached = db.get_translation("memory", user["id"], lang)
+    if cached is not None:
+        return cached
+    text = summarize.translate(row["content"], lang)
+    db.set_translation("memory", user["id"], lang, text)
+    return text
 
 
 def build(user: dict) -> dict:

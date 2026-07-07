@@ -86,7 +86,7 @@ struct LibraryView: View {
                         Image(systemName: me?.isAdmin == true ? "person.circle.fill" : "person.circle")
                     }
                     Button { showMemory = true } label: {
-                        Image(systemName: "brain")
+                        Image(systemName: "book.closed")
                     }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {

@@ -205,11 +205,12 @@
     padding: 8px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px;
   }
   .tabs button.active { color: var(--primary); border-color: var(--primary); }
-  #langToggle {
-    margin-left: auto; margin-bottom: 6px; border: 1px solid var(--line) !important;
-    border-radius: 999px; padding: 4px 14px; font-size: 12px;
+  .lang-select {
+    margin-left: auto; margin-bottom: 6px; border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 12px; font-size: 12px; font: inherit;
+    font-size: 12px; background: var(--card); color: var(--text-2); cursor: pointer;
   }
-  #langToggle.zh { background: var(--primary); color: #fff; border-color: var(--primary) !important; }
+  .lang-select.on { background: var(--primary); color: #fff; border-color: var(--primary); }
   .lb-body { overflow-y: auto; padding: 18px 24px 24px; flex: 1; }
   .lb-body pre {
     white-space: pre-wrap; font-family: inherit; font-size: 13.5px;
@@ -358,7 +359,7 @@
       Library
     </a>
     <a href="#" id="memoryNav">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4a4 4 0 0 0-4 4v.5A3.5 3.5 0 0 0 5 12a3.5 3.5 0 0 0 1.5 6H8a4 4 0 0 0 8 0h1.5A3.5 3.5 0 0 0 19 12a3.5 3.5 0 0 0-3-3.5V8a4 4 0 0 0-4-4z"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H12v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H12v16h6.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>
       Memory
     </a>
     <a href="#" id="usersNav" style="display:none">
@@ -431,7 +432,7 @@
       <div class="tabs">
         <button data-tab="summary" class="active">Summary</button>
         <button data-tab="transcript">Transcript</button>
-        <button id="langToggle" title="Translate summary">中文</button>
+        <select id="langToggle" class="lang-select" title="Translate summary"></select>
       </div>
       <div class="lb-body"><pre id="lbText"></pre></div>
     </div>
@@ -458,7 +459,7 @@
     <div id="memoryMeta" style="font-size:12px;color:var(--text-3);margin-bottom:12px"></div>
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <button class="btn" id="memoryBuild">Update memory</button>
-      <button class="btn ghost" id="memoryLang">中文</button>
+      <select class="lang-select" id="memoryLang" style="margin:0"></select>
       <button class="btn ghost danger" id="memoryReset">Reset</button>
     </div>
     <div class="md" id="memoryContent"></div>
@@ -679,8 +680,8 @@ async function openLightbox(id) {
   openId = id;
   openTab = "summary";
   sumLang = "en";
-  $("langToggle").classList.remove("zh");
-  $("langToggle").textContent = "中文";
+  $("langToggle").value = "en";
+  $("langToggle").classList.remove("on");
   $("lightbox").classList.add("open");
   $("lbPlayErr").textContent = "";
   $("lbAudio").src = `/api/files/${id}/audio?v=3`;  // v busts stale cached headers
@@ -810,8 +811,8 @@ async function fillLightbox(reset) {
     b.classList.toggle("active", b.dataset.tab === openTab));
   $("langToggle").style.display = openTab === "summary" ? "" : "none";
   let text;
-  if (openTab === "summary" && sumLang === "zh")
-    text = zhCache.get(openId) ?? "(translating…)";
+  if (openTab === "summary" && sumLang !== "en")
+    text = transCache.get(`${openId}|${sumLang}`) ?? "(translating…)";
   else
     text = openTab === "summary" ? f.summary : f.transcript;
   const key = `${openId}|${openTab}|${sumLang}|${text?.length ?? -1}`;
@@ -849,26 +850,34 @@ document.addEventListener("keydown", (e) => {
 document.querySelectorAll(".tabs button[data-tab]").forEach(b =>
   b.addEventListener("click", () => { openTab = b.dataset.tab; fillLightbox(false); }));
 
-/* ── Summary language toggle ── */
+/* ── Summary language dropdown ── */
 let sumLang = "en";
-const zhCache = new Map();
-const zhPending = new Set();
+const transCache = new Map();   // "id|lang" -> translated text
+const transPending = new Set();
+let languages = [{ code: "en", label: "English" }];
 
-$("langToggle").addEventListener("click", async () => {
-  sumLang = sumLang === "en" ? "zh" : "en";
-  $("langToggle").classList.toggle("zh", sumLang === "zh");
-  $("langToggle").textContent = sumLang === "zh" ? "EN" : "中文";
+async function loadLanguages() {
+  try { languages = await (await fetch("/api/languages")).json(); } catch {}
+  const opts = languages.map(l => `<option value="${l.code}">${l.label}</option>`).join("");
+  $("langToggle").innerHTML = opts;
+  $("memoryLang").innerHTML = opts;
+}
+
+$("langToggle").addEventListener("change", async (e) => {
+  sumLang = e.target.value;
+  $("langToggle").classList.toggle("on", sumLang !== "en");
   const id = openId;
-  if (sumLang === "zh" && id !== null && !zhCache.has(id) && !zhPending.has(id)) {
-    zhPending.add(id);
+  const cacheKey = `${id}|${sumLang}`;
+  if (sumLang !== "en" && id !== null && !transCache.has(cacheKey) && !transPending.has(cacheKey)) {
+    transPending.add(cacheKey);
     try {
-      const resp = await fetch(`/api/files/${id}/translate`, { method: "POST" });
+      const resp = await fetch(`/api/files/${id}/translate?lang=${sumLang}`, { method: "POST" });
       const data = await resp.json();
-      zhCache.set(id, resp.ok ? data.summary_zh : "⚠ " + data.detail);
+      transCache.set(cacheKey, resp.ok ? data.text : "⚠ " + data.detail);
     } catch (e) {
-      zhCache.set(id, "⚠ translation request failed: " + e);
+      transCache.set(cacheKey, "⚠ translation request failed: " + e);
     } finally {
-      zhPending.delete(id);
+      transPending.delete(cacheKey);
     }
   }
   if (openId !== null) fillLightbox(false);
@@ -1287,18 +1296,21 @@ $("trashModal").addEventListener("click", (e) => {
 /* ── Memory ── */
 let memLang = "en";
 let memData = null;
+const memTransCache = new Map();  // lang -> translated memory text
 
 async function openMemory() {
   $("profileModal").classList.remove("open");
   $("memoryModal").classList.add("open");
   memLang = "en";
-  $("memoryLang").textContent = "中文";
+  $("memoryLang").value = "en";
+  $("memoryLang").classList.remove("on");
+  memTransCache.clear();
   await refreshMemory();
 }
 
 function renderMemoryContent() {
-  const text = memLang === "zh" ? memData?.content_zh : memData?.content;
-  if (memLang === "zh" && !text) {
+  const text = memLang === "en" ? memData?.content : memTransCache.get(memLang);
+  if (memLang !== "en" && !text) {
     $("memoryContent").innerHTML = `<p style="color:var(--text-3)">(translating…)</p>`;
     return;
   }
@@ -1309,6 +1321,7 @@ function renderMemoryContent() {
 
 async function refreshMemory() {
   memData = await (await fetch("/api/memory")).json();
+  memTransCache.clear();  // fresh status may mean rebuilt content
   $("memoryMeta").textContent =
     (memData.updated_at ? `updated ${new Date(memData.updated_at).toLocaleString()}` : "never built") +
     ` · ${memData.pending} new recording${memData.pending === 1 ? "" : "s"} to fold in`;
@@ -1318,14 +1331,14 @@ async function refreshMemory() {
   renderMemoryContent();
 }
 
-$("memoryLang").addEventListener("click", async () => {
-  memLang = memLang === "en" ? "zh" : "en";
-  $("memoryLang").textContent = memLang === "zh" ? "EN" : "中文";
+$("memoryLang").addEventListener("change", async (e) => {
+  memLang = e.target.value;
+  $("memoryLang").classList.toggle("on", memLang !== "en");
   renderMemoryContent();
-  if (memLang === "zh" && memData && !memData.content_zh) {
-    const resp = await fetch("/api/memory/translate", { method: "POST" });
-    if (resp.ok) memData.content_zh = (await resp.json()).content_zh;
-    else memData.content_zh = "⚠ " + (await resp.json()).detail;
+  if (memLang !== "en" && memData?.content && !memTransCache.has(memLang)) {
+    const resp = await fetch(`/api/memory/translate?lang=${memLang}`, { method: "POST" });
+    const data = await resp.json();
+    memTransCache.set(memLang, resp.ok ? data.text : "⚠ " + data.detail);
     renderMemoryContent();
   }
 });
@@ -1355,6 +1368,7 @@ $("memoryReset").addEventListener("click", async () => {
 
 loadConfig();
 loadModels();
+loadLanguages();
 loadMe();
 refresh();
 setInterval(refresh, 3000);

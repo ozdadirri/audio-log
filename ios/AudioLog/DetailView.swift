@@ -8,11 +8,12 @@ struct DetailView: View {
     @State private var detail: FileDetail?
     @State private var segments: [TranscriptSegment] = []
     @State private var tab = 0            // 0 = summary, 1 = transcript
-    @State private var chinese = false
-    @State private var chineseText: String?
+    @State private var lang = "en"
+    @State private var translatedText: String?
     @State private var translating = false
     @State private var errorMessage: String?
     @State private var confirmDelete = false
+    @State private var languages: [APIClient.Language] = [.init(code: "en", label: "English")]
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -70,7 +71,11 @@ struct DetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if tab == 0 {
-                    Button(chinese ? "EN" : "中文") { toggleChinese() }
+                    Menu {
+                        Picker("Language", selection: $lang) {
+                            ForEach(languages) { Text($0.label).tag($0.code) }
+                        }
+                    } label: { Image(systemName: "globe") }
                         .disabled(translating)
                 }
             }
@@ -101,6 +106,7 @@ struct DetailView: View {
         }
         .task { await load() }
         .onDisappear { player.stop() }
+        .onChange(of: lang) { _, _ in loadTranslation() }
     }
 
     // A minimal RecordingFile so thumbURL can be reused for the header image.
@@ -145,8 +151,10 @@ struct DetailView: View {
     private var summaryView: some View {
         if translating {
             HStack { ProgressView(); Text("Translating…").foregroundStyle(.secondary) }
+        } else if lang == "en" {
+            MarkdownText(text: detail?.summary ?? "(not ready)")
         } else {
-            MarkdownText(text: (chinese ? chineseText : detail?.summary) ?? "(not ready)")
+            MarkdownText(text: translatedText ?? "(not ready)")
         }
     }
 
@@ -184,23 +192,23 @@ struct DetailView: View {
             let d = try await APIClient.detail(id: fileID)
             detail = d
             segments = TranscriptSegment.parse(d.transcript ?? "")
-            chineseText = d.summaryZh
             if let url = APIClient.audioURL(id: fileID) {
                 player.load(url: url, fallbackDuration: d.duration)
             }
+            if let langs = try? await APIClient.languages() { languages = langs }
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func toggleChinese() {
-        chinese.toggle()
-        guard chinese, chineseText == nil else { return }
+    private func loadTranslation() {
+        guard lang != "en" else { return }
+        translatedText = nil
         translating = true
         Task {
             defer { translating = false }
-            do { chineseText = try await APIClient.translate(id: fileID) }
-            catch { errorMessage = error.localizedDescription; chinese = false }
+            do { translatedText = try await APIClient.translate(id: fileID, lang: lang) }
+            catch { errorMessage = error.localizedDescription; lang = "en" }
         }
     }
 }
