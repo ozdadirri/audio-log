@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -29,7 +30,17 @@ EXTRA_INPUT_DIRS = [Path(p.strip()) for p in
 # are mirrored here — point it at a Drive-synced folder to publish digests.
 PUBLISH_DIR = Path(os.getenv("AUDIOLOG_PUBLISH_DIR")) if os.getenv("AUDIOLOG_PUBLISH_DIR") else None
 
-DB_PATH = Path(os.getenv("AUDIOLOG_DB", DATA_DIR / "audiolog.db"))
+# Built from DATABASE_HOST/USER/PASSWORD/PORT/NAME so the password never has to
+# be hand-escaped into a connection URL; set DATABASE_URL directly to override.
+_db_host = os.getenv("DATABASE_HOST", "localhost")
+_db_user = os.getenv("DATABASE_USER", "dadirri")
+_db_password = os.getenv("DATABASE_PASSWORD", "")
+_db_port = os.getenv("DATABASE_PORT", "5432")
+_db_name = os.getenv("DATABASE_NAME", "audiolog")
+_db_auth = f"{quote(_db_user)}:{quote(_db_password)}" if _db_password else quote(_db_user)
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", f"postgresql://{_db_auth}@{_db_host}:{_db_port}/{_db_name}"
+)
 
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo")
 # Whisper transcription runs as a separate service (see whisper_service/), same

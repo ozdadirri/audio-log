@@ -185,14 +185,51 @@ Values can also be set in a git-ignored `.env` file in the project root.
 | `AUDIOLOG_EXTRA_INPUT_DIRS` | *(empty)* | comma-separated additional watched folders |
 | `AUDIOLOG_PUBLISH_DIR` | *(empty)* | mirror each job's outputs here |
 | `AUDIOLOG_SCAN_INTERVAL` | `3` | seconds between input dir scans |
-| `AUDIOLOG_DATA_DIR` | `./data` | base dir for db, caches, default input/output |
+| `AUDIOLOG_DATA_DIR` | `./data` | base dir for caches, default input/output |
+| `DATABASE_HOST` | `localhost` | Postgres host (see Database below); works with a Tailscale hostname too |
+| `DATABASE_USER` | `dadirri` | Postgres role |
+| `DATABASE_PASSWORD` | *(empty)* | Postgres role's password |
+| `DATABASE_PORT` | `5432` | Postgres port |
+| `DATABASE_NAME` | `audiolog` | database name |
+| `DATABASE_URL` | *(built from the vars above)* | full connection string; set this directly to override the pieces above |
+
+## Database
+
+Recordings, transcripts, summaries, tags, users, memory, translations, and
+embedding vectors live in **Postgres**, not a local file. First-time setup:
+
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+
+createdb audiolog
+psql audiolog -f postgres/schema.sql
+```
+
+Point the app at it with `DATABASE_HOST`/`DATABASE_USER`/`DATABASE_PASSWORD`/
+`DATABASE_PORT`/`DATABASE_NAME` (see `.env.example`; see Configuration below) —
+these are assembled into a `DATABASE_URL` connection string for you. To run
+Postgres on a different Mac and connect to it remotely (e.g. over Tailscale —
+including from a second computer running the app itself), set
+`listen_addresses = '*'` in `postgresql.conf`, add a `pg_hba.conf` rule for
+your tailnet's CIDR (`100.64.0.0/10`) with `scram-sha-256`, set a password on
+the role (`ALTER ROLE <user> WITH PASSWORD '...'`), then restart Postgres and
+set `DATABASE_HOST` to the Tailscale hostname. No Postgres install is needed
+on a machine that only runs the app — just the Python driver (`psycopg`),
+already in `requirements.txt`.
+
+Migrating from an older SQLite-based install? Run
+`.venv/bin/python postgres/migrate_from_sqlite.py [path/to/audiolog.db]` once
+the schema above is applied — it copies every row across (preserving ids) and
+resets Postgres's sequences to continue from the highest migrated id.
+
+Full-text search runs against a generated `tsvector` column + GIN index on
+`files` (see `postgres/schema.sql`) rather than SQLite FTS5.
 
 ## Data layout
 
 ```
 data/
-  audiolog.db      # SQLite: recordings, transcripts, summaries, tags, users,
-                   #   memory, translations, embedding vectors, FTS5 index
   input/           # watched folder (source audio stays here)
   output/          # <name>-<hash>/ transcript.md, summary.md, meta.json
   thumbs/          # cached spectrogram PNGs (by content hash + date hue)
