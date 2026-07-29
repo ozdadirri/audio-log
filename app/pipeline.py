@@ -1,5 +1,11 @@
 """Background workers: an ingest loop that scans INPUT_DIR and a processing loop
-that runs pending jobs through transcribe -> summarize -> write outputs."""
+that runs pending jobs through transcribe -> summarize -> write outputs.
+
+The watched folder itself stays local disk (it has to — that's how files
+arrive), but once a file is stable it's uploaded to object storage and its
+local copy is removed; everything downstream (processing, outputs, caches)
+lives in storage from then on, not on whichever machine happened to run the
+worker."""
 
 import hashlib
 import json
@@ -10,7 +16,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import cleanup, config, db, paths, summarize, transcribe
+from . import cleanup, config, db, storage, summarize, transcribe
 
 log = logging.getLogger("audiolog")
 
@@ -73,10 +79,16 @@ def _scan_dir(input_dir: Path):
             _seen_sizes[path] = size  # first sighting or still growing; check next scan
             continue
         digest = _sha256(path)
+        key = storage.unique_key("input", path.name)
+        storage.upload(key, path)
         # Watched-folder files have no uploader; they belong to the admin.
-        file_id = db.add_file(digest, path.name, paths.to_db(path), user_id=db.admin_user_id())
+        file_id = db.add_file(digest, path.name, key, user_id=db.admin_user_id())
         if file_id is not None:
             log.info("queued %s (id=%s)", path.name, file_id)
+        else:
+            storage.delete(key)  # duplicate content — already in storage under another key
+        path.unlink()
+        _seen_sizes.pop(path, None)
 
 
 def worker_loop():
@@ -98,67 +110,75 @@ def _slug(name: str) -> str:
 
 def _process(job):
     file_id = job["id"]
-    source = paths.from_db(job["source_path"])
-    if not source.exists():
+    source_key = job["source_path"]
+    name = Path(source_key).name
+    source = storage.download_to_temp(source_key, suffix=Path(source_key).suffix)
+    if source is None:
         db.set_status(file_id, "error", error="source file no longer exists")
         return
 
-    out_dir = config.OUTPUT_DIR / f"{_slug(source.stem)}-{job['sha256'][:8]}"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    log.info("transcribing %s", source.name)
-    db.set_status(file_id, "transcribing")
-    result = transcribe.transcribe(str(source))
-    transcript_md = transcribe.format_transcript_md(result, source.name)
-    (out_dir / "transcript.md").write_text(transcript_md)
-
-    segments = result.get("segments", [])
-    duration = float(segments[-1]["end"]) if segments else None
-
-    log.info("summarizing %s", source.name)
-    db.set_status(file_id, "summarizing")
-    summary_md = summarize.summarize(result["text"].strip())
-    (out_dir / "summary.md").write_text(f"# Summary: {source.name}\n\n{summary_md}\n")
-
-    (out_dir / "meta.json").write_text(json.dumps({
-        "filename": source.name,
-        "source_path": str(source),
-        "sha256": job["sha256"],
-        "language": result.get("language"),
-        "duration_seconds": duration,
-        "whisper_model": config.WHISPER_MODEL,
-        "summary_model": db.get_setting("ollama_model", config.LLM_MODEL),
-    }, indent=2))
-
     try:
-        title = summarize.make_title(summary_md)
-        if title:
-            db.set_title(file_id, title)
-        tags = summarize.make_tags(summary_md)
-        if tags:
-            db.set_tags(file_id, tags)
-    except Exception:
-        log.exception("title/tag generation failed for %s", source.name)
+        out_prefix = f"output/{_slug(Path(name).stem)}-{job['sha256'][:8]}"
 
-    db.set_texts(file_id, transcript_md, summary_md)
+        log.info("transcribing %s", name)
+        db.set_status(file_id, "transcribing")
+        result = transcribe.transcribe(str(source))
+        transcript_md = transcribe.format_transcript_md(result, name)
+        storage.upload_text(f"{out_prefix}/transcript.md", transcript_md)
 
-    try:
-        from . import embeddings
-        embeddings.index_file(file_id)
-    except Exception:
-        log.exception("embedding failed for %s", source.name)
-    db.set_result(file_id, language=result.get("language"), duration=duration,
-                  output_dir=paths.to_db(out_dir))
-    db.set_status(file_id, "done")
-    log.info("done %s -> %s", source.name, out_dir)
+        segments = result.get("segments", [])
+        duration = float(segments[-1]["end"]) if segments else None
 
-    if config.PUBLISH_DIR:
+        log.info("summarizing %s", name)
+        db.set_status(file_id, "summarizing")
+        summary_md = summarize.summarize(result["text"].strip())
+        storage.upload_text(f"{out_prefix}/summary.md", f"# Summary: {name}\n\n{summary_md}\n")
+
+        storage.upload_text(f"{out_prefix}/meta.json", json.dumps({
+            "filename": name,
+            "source_path": source_key,
+            "sha256": job["sha256"],
+            "language": result.get("language"),
+            "duration_seconds": duration,
+            "whisper_model": config.WHISPER_MODEL,
+            "summary_model": db.get_setting("ollama_model", config.LLM_MODEL),
+        }, indent=2), content_type="application/json")
+
         try:
-            import shutil
-            shutil.copytree(out_dir, config.PUBLISH_DIR / out_dir.name, dirs_exist_ok=True)
-            log.info("published %s to %s", out_dir.name, config.PUBLISH_DIR)
+            title = summarize.make_title(summary_md)
+            if title:
+                db.set_title(file_id, title)
+            tags = summarize.make_tags(summary_md)
+            if tags:
+                db.set_tags(file_id, tags)
         except Exception:
-            log.exception("publish failed for %s", out_dir.name)
+            log.exception("title/tag generation failed for %s", name)
+
+        db.set_texts(file_id, transcript_md, summary_md)
+
+        try:
+            from . import embeddings
+            embeddings.index_file(file_id)
+        except Exception:
+            log.exception("embedding failed for %s", name)
+        db.set_result(file_id, language=result.get("language"), duration=duration,
+                      output_dir=out_prefix)
+        db.set_status(file_id, "done")
+        log.info("done %s -> %s", name, out_prefix)
+
+        if config.PUBLISH_DIR:
+            try:
+                publish_dir = config.PUBLISH_DIR / Path(out_prefix).name
+                publish_dir.mkdir(parents=True, exist_ok=True)
+                for fname in ("transcript.md", "summary.md", "meta.json"):
+                    text = storage.download_text(f"{out_prefix}/{fname}")
+                    if text is not None:
+                        (publish_dir / fname).write_text(text)
+                log.info("published %s to %s", Path(out_prefix).name, config.PUBLISH_DIR)
+            except Exception:
+                log.exception("publish failed for %s", Path(out_prefix).name)
+    finally:
+        source.unlink(missing_ok=True)
 
     # Auto-maintain the owner's long-term memory — but only once they've built
     # one; the first build stays a deliberate user action.
@@ -169,7 +189,7 @@ def _process(job):
             from . import memory
             memory.build(owner)
     except Exception:
-        log.exception("memory auto-update failed for %s", source.name)
+        log.exception("memory auto-update failed for %s", name)
 
 
 def start_background_threads() -> list[threading.Thread]:

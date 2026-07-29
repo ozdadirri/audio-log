@@ -192,6 +192,11 @@ Values can also be set in a git-ignored `.env` file in the project root.
 | `DATABASE_PORT` | `5432` | Postgres port |
 | `DATABASE_NAME` | `audiolog` | database name |
 | `DATABASE_URL` | *(built from the vars above)* | full connection string; set this directly to override the pieces above |
+| `MINIO_URL` | `http://localhost:9000` | MinIO S3 API endpoint (see Object storage below); works with a Tailscale hostname too |
+| `MINIO_ACCESS_KEY` | `admin` | MinIO root/access user |
+| `MINIO_SECRET_KEY` | *(empty)* | MinIO secret/password |
+| `MINIO_BUCKET` | `audiolog` | bucket name |
+| `MINIO_URL_EXPIRY` | `3600` | seconds a presigned URL handed to clients stays valid |
 
 ## Database
 
@@ -226,14 +231,43 @@ resets Postgres's sequences to continue from the highest migrated id.
 Full-text search runs against a generated `tsvector` column + GIN index on
 `files` (see `postgres/schema.sql`) rather than SQLite FTS5.
 
-## Data layout
+## Object storage
+
+Source audio, transcripts/summaries, thumbnails, and transcode cache all live
+in **MinIO** (S3-compatible object storage), not local disk — so the app can
+run on any machine and serve the same files. First-time setup:
+
+```bash
+brew install minio/stable/minio
+mkdir -p ~/minio-data
+
+MINIO_ROOT_USER=admin MINIO_ROOT_PASSWORD='choose-a-strong-password' \
+  minio server ~/minio-data --console-address ":9001"
+```
+
+- **Web console** (browse/manage buckets): `http://localhost:9001`
+- **S3 API** the app talks to: `http://localhost:9000`
+
+Create a bucket (e.g. `audiolog`) via the console, then point the app at it
+with `MINIO_URL`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY`/`MINIO_BUCKET` (see
+`.env.example`; see Configuration below). As with Postgres, `MINIO_URL` can be
+a Tailscale hostname to run MinIO on a different Mac — but note that
+presigned URLs handed to browsers/iOS embed whatever host `MINIO_URL` is set
+to, so it needs to be reachable from wherever clients actually are, not just
+from the app server.
+
+Object keys mirror the old local folder layout as prefixes:
 
 ```
-data/
-  input/           # watched folder (source audio stays here)
-  output/          # <name>-<hash>/ transcript.md, summary.md, meta.json
-  thumbs/          # cached spectrogram PNGs (by content hash + date hue)
-  transcode/       # cached m4a copies for browser playback
+input/<filename>                          # original uploaded/ingested audio
+output/<name>-<hash>/transcript.md
+output/<name>-<hash>/summary.md
+output/<name>-<hash>/meta.json
+thumbs/<sha256>-h<hue>.png                 # cached spectrogram thumbnails
+transcode/<sha256>.m4a                     # cached browser-playable transcodes
 ```
 
-Deleting `thumbs/` or `transcode/` is safe — they regenerate on demand.
+`data/input/` on local disk is still used as a drop/staging folder for the
+watched-folder ingest flow (Google Drive sync, etc.) — files are uploaded to
+MinIO and removed from there once queued. Nothing else under `data/` is used
+anymore.

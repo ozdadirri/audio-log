@@ -4,7 +4,6 @@ with the spectrogram thumbnail embedded, in one self-contained file."""
 import base64
 import html
 import re
-from pathlib import Path
 
 STYLE = """
 body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 720px;
@@ -49,11 +48,11 @@ def _md_to_html(md: str) -> str:
     return "\n".join(out)
 
 
-def render(row: dict, thumb: Path | None, *, print_dialog: bool = False) -> str:
+def render(row: dict, thumb: bytes | None, *, print_dialog: bool = False) -> str:
     title = html.escape(row.get("title") or row["filename"])
     thumb_tag = ""
-    if thumb and thumb.exists():
-        b64 = base64.b64encode(thumb.read_bytes()).decode()
+    if thumb:
+        b64 = base64.b64encode(thumb).decode()
         thumb_tag = f'<img class="thumb" src="data:image/png;base64,{b64}" alt="">'
     meta = "".join(
         f"<span>{html.escape(str(v))}</span>" for v in [

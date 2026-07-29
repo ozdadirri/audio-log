@@ -1,16 +1,15 @@
 """On-demand transcoding of browser-unfriendly audio (aiff, wma, amr, ...) to
-m4a for in-browser playback. Cached under DATA_DIR/transcode by content hash."""
+m4a for in-browser playback. Cached in object storage under
+transcode/<sha256>.m4a (see app/storage.py)."""
 
 import logging
 import subprocess
+import tempfile
 from pathlib import Path
 
-from . import config
+from . import storage
 
 log = logging.getLogger("audiolog")
-
-CACHE_DIR = config.DATA_DIR / "transcode"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Formats all major browsers decode natively; everything else gets transcoded.
 # .webm is excluded on purpose: MediaRecorder output lacks duration/seek cues,
@@ -18,24 +17,30 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 BROWSER_SAFE = {".mp3", ".m4a", ".mp4", ".wav", ".flac", ".ogg", ".opus", ".aac"}
 
 
-def playable_path(sha256: str, source: Path) -> Path | None:
-    """Return a browser-playable file for `source`: the file itself if the format
-    is safe, else a cached m4a transcode. None if transcoding fails."""
-    if source.suffix.lower() in BROWSER_SAFE:
-        return source
-    dest = CACHE_DIR / f"{sha256}.m4a"
-    if dest.exists():
-        return dest
-    tmp = dest.with_suffix(".tmp.m4a")
-    try:
-        subprocess.run(
-            ["ffmpeg", "-v", "error", "-y", "-i", str(source), "-vn",
-             "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(tmp)],
-            capture_output=True, check=True,
-        )
-        tmp.replace(dest)
-    except subprocess.CalledProcessError as e:
-        log.error("transcode failed for %s: %s", source, e.stderr.decode(errors="replace"))
-        tmp.unlink(missing_ok=True)
+def playable_key(sha256: str, source_key: str) -> str | None:
+    """Return a browser-playable object key for `source_key`: the key itself if
+    the format is safe, else a cached m4a transcode's key. None if transcoding
+    fails or the source is missing."""
+    ext = Path(source_key).suffix.lower()
+    if ext in BROWSER_SAFE:
+        return source_key
+    dest_key = f"transcode/{sha256}.m4a"
+    if storage.exists(dest_key):
+        return dest_key
+    source = storage.download_to_temp(source_key, suffix=ext)
+    if source is None:
         return None
-    return dest
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".m4a") as tmp:
+            subprocess.run(
+                ["ffmpeg", "-v", "error", "-y", "-i", str(source), "-vn",
+                 "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", tmp.name],
+                capture_output=True, check=True,
+            )
+            storage.upload(dest_key, Path(tmp.name), content_type="audio/mp4")
+    except subprocess.CalledProcessError as e:
+        log.error("transcode failed for %s: %s", source_key, e.stderr.decode(errors="replace"))
+        return None
+    finally:
+        source.unlink(missing_ok=True)
+    return dest_key

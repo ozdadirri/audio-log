@@ -18,9 +18,9 @@ if _env_file.exists():
 DATA_DIR = Path(os.getenv("AUDIOLOG_DATA_DIR", BASE_DIR / "data"))
 
 # Drop audio files here (point this at a Google Drive-synced folder to ingest from Drive).
+# Files are uploaded to object storage and removed from here once ingested —
+# this is a local drop/staging folder, not where recordings end up living.
 INPUT_DIR = Path(os.getenv("AUDIOLOG_INPUT_DIR", DATA_DIR / "input"))
-# Results are written here (point at a Drive-synced folder to sync results back).
-OUTPUT_DIR = Path(os.getenv("AUDIOLOG_OUTPUT_DIR", DATA_DIR / "output"))
 
 # Extra watched folders, comma-separated (e.g. a Google Drive-synced dir).
 EXTRA_INPUT_DIRS = [Path(p.strip()) for p in
@@ -41,6 +41,16 @@ _db_auth = f"{quote(_db_user)}:{quote(_db_password)}" if _db_password else quote
 DATABASE_URL = os.getenv(
     "DATABASE_URL", f"postgresql://{_db_auth}@{_db_host}:{_db_port}/{_db_name}"
 )
+
+# Object storage (MinIO/S3-compatible) for audio files, transcripts/summaries,
+# thumbnails, and transcode cache — see app/storage.py. Point this at a Tailscale
+# hostname to run MinIO on another Mac.
+MINIO_URL = os.getenv("MINIO_URL", "http://localhost:9000").rstrip("/")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "admin")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "")
+MINIO_BUCKET = os.getenv("MINIO_BUCKET", "audiolog")
+# How long presigned URLs handed to clients (browser/iOS) stay valid, in seconds.
+MINIO_URL_EXPIRY = int(os.getenv("MINIO_URL_EXPIRY", "3600"))
 
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo")
 # Whisper transcription runs as a separate service (see whisper_service/), same
@@ -70,6 +80,6 @@ AUDIO_EXTENSIONS = {
     ".aiff", ".aif", ".wma", ".amr", ".mp4", ".webm", ".mov",
 }
 
-for _dir in (DATA_DIR, INPUT_DIR, OUTPUT_DIR, *EXTRA_INPUT_DIRS,
+for _dir in (DATA_DIR, INPUT_DIR, *EXTRA_INPUT_DIRS,
               *([PUBLISH_DIR] if PUBLISH_DIR else [])):
     _dir.mkdir(parents=True, exist_ok=True)
