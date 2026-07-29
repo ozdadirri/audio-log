@@ -33,15 +33,19 @@ DB_PATH = Path(os.getenv("AUDIOLOG_DB", DATA_DIR / "audiolog.db"))
 
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo")
 # Whisper transcription runs as a separate service (see whisper_service/), same
-# pattern as OLLAMA_URL below — keeps the mac/mlx-only dependency out of the main app.
+# pattern as LLM_API_URL below — keeps the mac/mlx-only dependency out of the main app.
 # Point this at a Tailscale hostname to run it on another Mac.
 WHISPER_URL = os.getenv("WHISPER_URL", "http://localhost:8301").rstrip("/")
 # If set, sent as X-API-Key to the whisper service. Empty = no auth.
 WHISPER_API_KEY = os.getenv("WHISPER_API_KEY", "")
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("AUDIOLOG_OLLAMA_MODEL", "qwen3.6:27b")
-EMBED_MODEL = os.getenv("AUDIOLOG_EMBED_MODEL", "nomic-embed-text")
+# Chat + embedding models are served by an Ollama-compatible API, same pattern as
+# WHISPER_URL above. Point this at a Tailscale hostname to run it on another Mac.
+LLM_API_URL = os.getenv("LLM_API_URL", "http://localhost:11434").rstrip("/")
+# If set, sent as `Authorization: Bearer ...`. Empty = no auth (plain Ollama).
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen3.6:27b")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
 
 # If set, every /api request must carry this key (X-API-Key header, ?key= query
 # param, or audiolog_key cookie). Empty = auth disabled.

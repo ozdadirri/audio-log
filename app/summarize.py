@@ -39,15 +39,18 @@ Merge them into a single digest with the same section structure
 
 
 def _ollama_chat(prompt: str) -> str:
+    headers = ({"Authorization": f"Bearer {config.LLM_API_KEY}"}
+               if config.LLM_API_KEY else {})
     resp = httpx.post(
-        f"{config.OLLAMA_URL}/api/chat",
+        f"{config.LLM_API_URL}/api/chat",
         json={
             # the UI can switch models at runtime; env var is the default
-            "model": db.get_setting("ollama_model", config.OLLAMA_MODEL),
+            "model": db.get_setting("ollama_model", config.LLM_MODEL),
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
             "think": False,
         },
+        headers=headers,
         timeout=600,
     )
     resp.raise_for_status()

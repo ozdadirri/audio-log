@@ -19,9 +19,12 @@ _SEGMENT = re.compile(r"^\*\*\[(\d+:\d{2})\]\*\*\s*(.*)$")
 
 
 def _embed(texts: list[str]) -> np.ndarray:
+    headers = ({"Authorization": f"Bearer {config.LLM_API_KEY}"}
+               if config.LLM_API_KEY else {})
     resp = httpx.post(
-        f"{config.OLLAMA_URL}/api/embed",
+        f"{config.LLM_API_URL}/api/embed",
         json={"model": config.EMBED_MODEL, "input": texts},
+        headers=headers,
         timeout=120,
     )
     resp.raise_for_status()
