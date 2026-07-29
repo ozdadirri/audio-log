@@ -119,7 +119,11 @@ AUDIO_MEDIA_TYPES = {
 
 
 @app.get("/api/files/{file_id}/audio")
-def get_audio(file_id: int, request: Request):
+@app.get("/api/files/{file_id}/audio.{ext}")
+def get_audio(file_id: int, request: Request, ext: str = ""):
+    # `ext` is unused server-side (the real format is derived from the file itself);
+    # it only exists so clients can put a real extension in the URL path — some
+    # players (iOS AVPlayer) sniff format from the URL rather than Content-Type.
     row = _fetch_owned(file_id, request)
     source = paths.from_db(row["source_path"])
     if not source.exists():

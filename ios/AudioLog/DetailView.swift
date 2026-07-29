@@ -87,10 +87,10 @@ struct DetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("Re-run processing") { Task { try? await APIClient.rerun(id: fileID) } }
-                    Button(detail?.memExclude == 1 ? "Include in memory" : "Exclude from memory") {
+                    Button(detail?.memExclude == true ? "Include in memory" : "Exclude from memory") {
                         Task {
                             try? await APIClient.setMemExclude(
-                                id: fileID, exclude: detail?.memExclude != 1)
+                                id: fileID, exclude: detail?.memExclude != true)
                             await load()
                         }
                     }
@@ -197,7 +197,7 @@ struct DetailView: View {
             let d = try await APIClient.detail(id: fileID)
             detail = d
             segments = TranscriptSegment.parse(d.transcript ?? "")
-            if let url = APIClient.audioURL(id: fileID) {
+            if let url = APIClient.audioURL(id: fileID, filename: d.filename) {
                 player.load(url: url, fallbackDuration: d.duration)
             }
             if let langs = try? await APIClient.languages() { languages = langs }

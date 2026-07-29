@@ -14,6 +14,9 @@ final class PlayerController: ObservableObject {
     func load(url: URL, fallbackDuration: Double?) {
         try? AVAudioSession.sharedInstance().setCategory(.playback)
         try? AVAudioSession.sharedInstance().setActive(true)
+        // The URL includes a real file extension (see APIClient.audioURL) so
+        // AVFoundation's format sniffing — which leans on the path extension
+        // rather than the server's Content-Type — resolves correctly.
         let item = AVPlayerItem(url: url)
         let player = AVPlayer(playerItem: item)
         self.player = player

@@ -42,7 +42,7 @@ struct FileDetail: Codable {
     let language: String?
     let duration: Double?
     let tags: String?
-    let memExclude: Int?
+    let memExclude: Bool?
     let createdAt: String
     let transcript: String?
     let summary: String?
@@ -145,7 +145,7 @@ struct UserAccount: Codable, Identifiable {
     let id: Int
     let username: String
     let apiKey: String
-    let isAdmin: Int
+    let isAdmin: Bool
     let fileCount: Int?   // absent in the create-user response
 
     enum CodingKeys: String, CodingKey {
