@@ -129,7 +129,7 @@ struct UsersView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Text(user.username).bold()
-                            if user.isAdmin == 1 {
+                            if user.isAdmin {
                                 Text("ADMIN").font(.caption2.bold())
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 6).padding(.vertical, 1)
@@ -144,7 +144,7 @@ struct UsersView: View {
                             .textSelection(.enabled)
                     }
                     .swipeActions {
-                        if user.isAdmin == 0 {
+                        if !user.isAdmin {
                             Button("Delete", role: .destructive) { remove(user) }
                         }
                     }
