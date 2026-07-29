@@ -6,11 +6,11 @@ Run from inside this directory: uvicorn main:app --host 0.0.0.0 --port 8301
 """
 
 import os
+import tempfile
 from pathlib import Path
 
 import mlx_whisper
-from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 
 # Load KEY=value lines from the repo-root .env (real env vars still win) — same
 # file the main app reads, so WHISPER_* vars only need to be set once.
@@ -29,11 +29,6 @@ API_KEY = os.getenv("WHISPER_API_KEY", "")
 app = FastAPI(title="whisper-service")
 
 
-class TranscribeRequest(BaseModel):
-    audio_path: str
-    model: str | None = None
-
-
 def _check_key(x_api_key: str | None):
     if API_KEY and x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="invalid or missing X-API-Key")
@@ -45,10 +40,21 @@ def health():
 
 
 @app.post("/transcribe")
-def transcribe(req: TranscribeRequest, x_api_key: str | None = Header(None)) -> dict:
-    """Returns {"text": str, "segments": [...], "language": str}."""
+async def transcribe(
+    file: UploadFile = File(...),
+    model: str | None = Form(None),
+    x_api_key: str | None = Header(None),
+) -> dict:
+    """Returns {"text": str, "segments": [...], "language": str}.
+
+    The audio arrives as an upload and is spooled to a temp file, since callers
+    generally run on another machine and share no filesystem with us."""
     _check_key(x_api_key)
-    return mlx_whisper.transcribe(
-        req.audio_path,
-        path_or_hf_repo=req.model or DEFAULT_MODEL,
-    )
+    with tempfile.NamedTemporaryFile(suffix=Path(file.filename or "").suffix) as tmp:
+        while chunk := await file.read(1 << 20):
+            tmp.write(chunk)
+        tmp.flush()
+        return mlx_whisper.transcribe(
+            tmp.name,
+            path_or_hf_repo=model or DEFAULT_MODEL,
+        )

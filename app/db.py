@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import config
+from . import config, paths
 
 log = logging.getLogger("audiolog")
 
@@ -137,7 +137,7 @@ def _backfill(conn):
         "WHERE transcript IS NULL AND output_dir IS NOT NULL"
     ).fetchall()
     for r in rows:
-        out = Path(r["output_dir"])
+        out = paths.from_db(r["output_dir"])
         t, s = out / "transcript.md", out / "summary.md"
         conn.execute(
             "UPDATE files SET transcript = ?, summary = ? WHERE id = ?",
@@ -505,6 +505,16 @@ def list_files(user_id: int | None = None) -> list[dict]:
             (user_id,) if user_id is not None else (),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def get_file_by_hash(sha256: str) -> dict | None:
+    """The existing row for this content, if any. Used to tell an uploader that
+    a recording is already in the library rather than silently doing nothing."""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT id, filename, deleted_at FROM files WHERE sha256 = ?", (sha256,)
+        ).fetchone()
+        return dict(row) if row else None
 
 
 def get_file(file_id: int) -> dict | None:

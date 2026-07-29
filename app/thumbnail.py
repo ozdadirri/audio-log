@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from . import config
+from . import config, paths
 
 log = logging.getLogger("audiolog")
 
@@ -112,7 +112,7 @@ def get_or_create(sha256: str, source_path: str, created_at: str) -> Path | None
     dest = THUMB_DIR / f"{sha256}-h{hue}.png"  # hue in the name invalidates old-style thumbs
     if dest.exists():
         return dest
-    source = Path(source_path)
+    source = paths.from_db(source_path)
     if not source.exists():
         return None
     try:

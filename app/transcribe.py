@@ -2,20 +2,27 @@
 whisper_service/main.py), which wraps mlx-whisper. Kept as a separate service so the
 mac/mlx-only dependency can be run and updated independently of the main app."""
 
+from pathlib import Path
+
 import httpx
 
 from . import config
 
 
 def transcribe(audio_path: str) -> dict:
-    """Returns {"text": str, "segments": [...], "language": str}."""
+    """Returns {"text": str, "segments": [...], "language": str}.
+
+    The audio is uploaded with the request rather than passed by path: the service
+    usually runs on a different machine, which cannot see our filesystem."""
     headers = {"X-API-Key": config.WHISPER_API_KEY} if config.WHISPER_API_KEY else {}
-    resp = httpx.post(
-        f"{config.WHISPER_URL}/transcribe",
-        json={"audio_path": audio_path, "model": config.WHISPER_MODEL},
-        headers=headers,
-        timeout=None,
-    )
+    with open(audio_path, "rb") as f:
+        resp = httpx.post(
+            f"{config.WHISPER_URL}/transcribe",
+            files={"file": (Path(audio_path).name, f)},
+            data={"model": config.WHISPER_MODEL},
+            headers=headers,
+            timeout=None,
+        )
     resp.raise_for_status()
     return resp.json()
 

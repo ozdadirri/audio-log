@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import (assistant, cleanup, config, db, embeddings, export, memory,
-               pipeline, thumbnail, transcode)
+               paths, pipeline, thumbnail, transcode)
 from . import summarize as summarize_mod
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -91,7 +91,7 @@ def list_files(request: Request):
 def get_file(file_id: int, request: Request):
     row = _fetch_owned(file_id, request)
     # Texts live in the DB; fall back to the markdown files for old rows.
-    out = Path(row["output_dir"]) if row["output_dir"] else None
+    out = paths.from_db(row["output_dir"]) if row["output_dir"] else None
     for key, name in (("transcript", "transcript.md"), ("summary", "summary.md")):
         if row.get(key):
             continue
@@ -121,9 +121,10 @@ AUDIO_MEDIA_TYPES = {
 @app.get("/api/files/{file_id}/audio")
 def get_audio(file_id: int, request: Request):
     row = _fetch_owned(file_id, request)
-    if not Path(row["source_path"]).exists():
+    source = paths.from_db(row["source_path"])
+    if not source.exists():
         raise HTTPException(404)
-    path = transcode.playable_path(row["sha256"], Path(row["source_path"]))
+    path = transcode.playable_path(row["sha256"], source)
     if path is None:
         raise HTTPException(500, "transcoding failed")
     filename = row["filename"] if path.suffix != ".m4a" else Path(row["filename"]).stem + ".m4a"
@@ -188,10 +189,24 @@ def upload(file: UploadFile, request: Request):
         counter += 1
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
+    # An empty upload would be accepted as a new recording (the hash of "" is
+    # unique), then fail to play with a 416 and fail to transcribe.
+    if dest.stat().st_size == 0:
+        dest.unlink()
+        raise HTTPException(400, "uploaded file is empty")
     # Register the row now so it belongs to the uploader; the folder scanner
     # would otherwise pick it up later and assign it to the admin.
-    file_id = db.add_file(pipeline._sha256(dest), dest.name, str(dest),
+    digest = pipeline._sha256(dest)
+    file_id = db.add_file(digest, dest.name, paths.to_db(dest),
                           user_id=request.state.user["id"])
+    if file_id is None:
+        # Same content is already in the library. Drop the redundant copy and say
+        # so — returning 200 here looks like success but nothing would appear.
+        dest.unlink()
+        existing = db.get_file_by_hash(digest)
+        where = "in the trash" if existing and existing["deleted_at"] else "in your library"
+        raise HTTPException(
+            409, f"already {where}: {existing['filename'] if existing else base}")
     return {"saved": str(dest), "id": file_id}
 
 
@@ -388,13 +403,15 @@ def ask(body: AskBody, request: Request):
 def list_models():
     """Installed Ollama models plus the currently selected one."""
     try:
-        resp = httpx.get(f"{config.OLLAMA_URL}/api/tags", timeout=5)
+        headers = ({"Authorization": f"Bearer {config.LLM_API_KEY}"}
+                   if config.LLM_API_KEY else {})
+        resp = httpx.get(f"{config.LLM_API_URL}/api/tags", headers=headers, timeout=5)
         resp.raise_for_status()
         models = [m["name"] for m in resp.json().get("models", [])]
     except Exception as e:
-        raise HTTPException(502, f"cannot reach Ollama: {e}")
+        raise HTTPException(502, f"cannot reach the LLM API: {e}")
     return {"models": models,
-            "current": db.get_setting("ollama_model", config.OLLAMA_MODEL)}
+            "current": db.get_setting("ollama_model", config.LLM_MODEL)}
 
 
 class ModelBody(BaseModel):
@@ -416,5 +433,5 @@ def get_config():
         "input_dir": str(config.INPUT_DIR),
         "output_dir": str(config.OUTPUT_DIR),
         "whisper_model": config.WHISPER_MODEL,
-        "ollama_model": db.get_setting("ollama_model", config.OLLAMA_MODEL),
+        "ollama_model": db.get_setting("ollama_model", config.LLM_MODEL),
     }

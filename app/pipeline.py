@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import cleanup, config, db, summarize, transcribe
+from . import cleanup, config, db, paths, summarize, transcribe
 
 log = logging.getLogger("audiolog")
 
@@ -74,7 +74,7 @@ def _scan_dir(input_dir: Path):
             continue
         digest = _sha256(path)
         # Watched-folder files have no uploader; they belong to the admin.
-        file_id = db.add_file(digest, path.name, str(path), user_id=db.admin_user_id())
+        file_id = db.add_file(digest, path.name, paths.to_db(path), user_id=db.admin_user_id())
         if file_id is not None:
             log.info("queued %s (id=%s)", path.name, file_id)
 
@@ -98,7 +98,7 @@ def _slug(name: str) -> str:
 
 def _process(job):
     file_id = job["id"]
-    source = Path(job["source_path"])
+    source = paths.from_db(job["source_path"])
     if not source.exists():
         db.set_status(file_id, "error", error="source file no longer exists")
         return
@@ -127,7 +127,7 @@ def _process(job):
         "language": result.get("language"),
         "duration_seconds": duration,
         "whisper_model": config.WHISPER_MODEL,
-        "summary_model": config.OLLAMA_MODEL,
+        "summary_model": db.get_setting("ollama_model", config.LLM_MODEL),
     }, indent=2))
 
     try:
@@ -148,7 +148,7 @@ def _process(job):
     except Exception:
         log.exception("embedding failed for %s", source.name)
     db.set_result(file_id, language=result.get("language"), duration=duration,
-                  output_dir=str(out_dir))
+                  output_dir=paths.to_db(out_dir))
     db.set_status(file_id, "done")
     log.info("done %s -> %s", source.name, out_dir)
 
