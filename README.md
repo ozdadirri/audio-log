@@ -186,7 +186,12 @@ Values can also be set in a git-ignored `.env` file in the project root.
 | `AUDIOLOG_PUBLISH_DIR` | *(empty)* | mirror each job's outputs here |
 | `AUDIOLOG_SCAN_INTERVAL` | `3` | seconds between input dir scans |
 | `AUDIOLOG_DATA_DIR` | `./data` | base dir for caches, default input/output |
-| `DATABASE_URL` | `postgresql://<user>@localhost/audiolog` | Postgres connection string (see Database below); works with a Tailscale hostname too |
+| `DATABASE_HOST` | `localhost` | Postgres host (see Database below); works with a Tailscale hostname too |
+| `DATABASE_USER` | `dadirri` | Postgres role |
+| `DATABASE_PASSWORD` | *(empty)* | Postgres role's password |
+| `DATABASE_PORT` | `5432` | Postgres port |
+| `DATABASE_NAME` | `audiolog` | database name |
+| `DATABASE_URL` | *(built from the vars above)* | full connection string; set this directly to override the pieces above |
 
 ## Database
 
@@ -201,13 +206,22 @@ createdb audiolog
 psql audiolog -f postgres/schema.sql
 ```
 
-Point the app at it with `DATABASE_URL` (see Configuration below) — defaults to
-`postgresql://<your-user>@localhost/audiolog`. To run Postgres on a different
-Mac and connect to it remotely (e.g. over Tailscale), set `listen_addresses = '*'`
-in `postgresql.conf`, add a `pg_hba.conf` rule for your tailnet's CIDR
-(`100.64.0.0/10`) with `scram-sha-256`, set a password on the role
-(`ALTER ROLE <user> WITH PASSWORD '...'`), then restart Postgres and use the
-Tailscale hostname in `DATABASE_URL`.
+Point the app at it with `DATABASE_HOST`/`DATABASE_USER`/`DATABASE_PASSWORD`/
+`DATABASE_PORT`/`DATABASE_NAME` (see `.env.example`; see Configuration below) —
+these are assembled into a `DATABASE_URL` connection string for you. To run
+Postgres on a different Mac and connect to it remotely (e.g. over Tailscale —
+including from a second computer running the app itself), set
+`listen_addresses = '*'` in `postgresql.conf`, add a `pg_hba.conf` rule for
+your tailnet's CIDR (`100.64.0.0/10`) with `scram-sha-256`, set a password on
+the role (`ALTER ROLE <user> WITH PASSWORD '...'`), then restart Postgres and
+set `DATABASE_HOST` to the Tailscale hostname. No Postgres install is needed
+on a machine that only runs the app — just the Python driver (`psycopg`),
+already in `requirements.txt`.
+
+Migrating from an older SQLite-based install? Run
+`.venv/bin/python postgres/migrate_from_sqlite.py [path/to/audiolog.db]` once
+the schema above is applied — it copies every row across (preserving ids) and
+resets Postgres's sequences to continue from the highest migrated id.
 
 Full-text search runs against a generated `tsvector` column + GIN index on
 `files` (see `postgres/schema.sql`) rather than SQLite FTS5.
