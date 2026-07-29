@@ -2,22 +2,17 @@
 Shared by the delete-forever endpoint and the trash auto-purge."""
 
 import logging
-import shutil
-from pathlib import Path
 
-from . import db, paths, thumbnail, transcode
+from . import db, storage
 
 log = logging.getLogger("audiolog")
 
 
 def hard_delete(row: dict):
-    src = paths.from_db(row["source_path"])
-    if src.exists():
-        src.unlink()
+    storage.delete(row["source_path"])
     if row.get("output_dir"):
-        shutil.rmtree(paths.from_db(row["output_dir"]), ignore_errors=True)
-    for p in thumbnail.THUMB_DIR.glob(f"{row['sha256']}*.png"):
-        p.unlink(missing_ok=True)
-    (transcode.CACHE_DIR / f"{row['sha256']}.m4a").unlink(missing_ok=True)
+        storage.delete_prefix(row["output_dir"] + "/")
+    storage.delete_prefix(f"thumbs/{row['sha256']}")
+    storage.delete(f"transcode/{row['sha256']}.m4a")
     db.delete_file(row["id"])
     log.info("hard-deleted %s (id=%s)", row["filename"], row["id"])

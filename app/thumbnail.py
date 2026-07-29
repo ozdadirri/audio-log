@@ -1,22 +1,21 @@
 """Square spectrogram thumbnails: ffmpeg decode -> numpy log-spectrogram ->
 colormapped PNG, with the color scheme derived from the recording date so
-different days are visually distinct. Cached under DATA_DIR/thumbs by content hash."""
+different days are visually distinct. Cached in object storage under
+thumbs/<sha256>-h<hue>.png (see app/storage.py)."""
 
 import colorsys
 import logging
 import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-from . import config, paths
+from . import storage
 
 log = logging.getLogger("audiolog")
-
-THUMB_DIR = config.DATA_DIR / "thumbs"
-THUMB_DIR.mkdir(parents=True, exist_ok=True)
 
 SAMPLE_RATE = 16000
 SIZE = 512  # thumbnail is SIZE x SIZE pixels
@@ -106,18 +105,24 @@ def generate(source: Path, dest: Path, hue_deg: int):
     tmp.replace(dest)
 
 
-def get_or_create(sha256: str, source_path: str, created_at: str) -> Path | None:
-    """Return the cached thumbnail path, generating it if needed. None on failure."""
+def get_or_create(sha256: str, source_key: str, created_at: str) -> str | None:
+    """Return the cached thumbnail's object key, generating it if needed.
+    None on failure."""
     hue = date_hue(created_at)
-    dest = THUMB_DIR / f"{sha256}-h{hue}.png"  # hue in the name invalidates old-style thumbs
-    if dest.exists():
-        return dest
-    source = paths.from_db(source_path)
-    if not source.exists():
+    key = f"thumbs/{sha256}-h{hue}.png"  # hue in the name invalidates old-style thumbs
+    if storage.exists(key):
+        return key
+    source = storage.download_to_temp(source_key, suffix=Path(source_key).suffix)
+    if source is None:
         return None
     try:
-        generate(source, dest, hue)
+        with tempfile.TemporaryDirectory() as td:
+            dest = Path(td) / "thumb.png"
+            generate(source, dest, hue)
+            storage.upload(key, dest, content_type="image/png")
     except Exception:
-        log.exception("thumbnail generation failed for %s", source)
+        log.exception("thumbnail generation failed for %s", source_key)
         return None
-    return dest
+    finally:
+        source.unlink(missing_ok=True)
+    return key

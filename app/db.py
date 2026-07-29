@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 import psycopg
 from psycopg.rows import dict_row
 
-from . import config, paths
+from . import config, storage
 
 log = logging.getLogger("audiolog")
 
@@ -86,12 +86,11 @@ def _backfill(conn):
         "WHERE transcript IS NULL AND output_dir IS NOT NULL"
     ).fetchall()
     for r in rows:
-        out = paths.from_db(r["output_dir"])
-        t, s = out / "transcript.md", out / "summary.md"
+        out = r["output_dir"]
         conn.execute(
             "UPDATE files SET transcript = %s, summary = %s WHERE id = %s",
-            (t.read_text() if t.exists() else None,
-             s.read_text() if s.exists() else None, r["id"]),
+            (storage.download_text(f"{out}/transcript.md"),
+             storage.download_text(f"{out}/summary.md"), r["id"]),
         )
 
 

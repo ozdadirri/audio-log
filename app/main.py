@@ -1,21 +1,21 @@
 """FastAPI app: JSON API + bare HTML frontend, with the pipeline running in
 background threads."""
 
+import hashlib
 import logging
 import re
-import shutil
 
 import httpx
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import (assistant, cleanup, config, db, embeddings, export, memory,
-               paths, pipeline, thumbnail, transcode)
+               pipeline, storage, thumbnail, transcode)
 from . import summarize as summarize_mod
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -90,24 +90,22 @@ def list_files(request: Request):
 @app.get("/api/files/{file_id}")
 def get_file(file_id: int, request: Request):
     row = _fetch_owned(file_id, request)
-    # Texts live in the DB; fall back to the markdown files for old rows.
-    out = paths.from_db(row["output_dir"]) if row["output_dir"] else None
+    # Texts live in the DB; fall back to the stored markdown files for old rows.
+    out = row["output_dir"]
     for key, name in (("transcript", "transcript.md"), ("summary", "summary.md")):
         if row.get(key):
             continue
-        f = out / name if out else None
-        row[key] = f.read_text() if f and f.exists() else None
+        row[key] = storage.download_text(f"{out}/{name}") if out else None
     return row
 
 
 @app.get("/api/files/{file_id}/thumb")
 def get_thumb(file_id: int, request: Request):
     row = _fetch_owned(file_id, request)
-    path = thumbnail.get_or_create(row["sha256"], row["source_path"], row["created_at"])
-    if path is None:
+    key = thumbnail.get_or_create(row["sha256"], row["source_path"], row["created_at"])
+    if key is None:
         raise HTTPException(404, "thumbnail unavailable")
-    return FileResponse(path, media_type="image/png",
-                        headers={"Cache-Control": "max-age=31536000, immutable"})
+    return RedirectResponse(storage.presigned_url(key, content_type="image/png"))
 
 
 # Explicit types where Python's mimetypes guess is wrong or unplayable in browsers
@@ -125,16 +123,16 @@ def get_audio(file_id: int, request: Request, ext: str = ""):
     # it only exists so clients can put a real extension in the URL path — some
     # players (iOS AVPlayer) sniff format from the URL rather than Content-Type.
     row = _fetch_owned(file_id, request)
-    source = paths.from_db(row["source_path"])
-    if not source.exists():
+    if not storage.exists(row["source_path"]):
         raise HTTPException(404)
-    path = transcode.playable_path(row["sha256"], source)
-    if path is None:
+    key = transcode.playable_key(row["sha256"], row["source_path"])
+    if key is None:
         raise HTTPException(500, "transcoding failed")
-    filename = row["filename"] if path.suffix != ".m4a" else Path(row["filename"]).stem + ".m4a"
+    suffix = Path(key).suffix.lower()
+    filename = row["filename"] if suffix != ".m4a" else Path(row["filename"]).stem + ".m4a"
     # inline, not attachment: browsers refuse to play <audio> marked as a download
-    return FileResponse(path, filename=filename, content_disposition_type="inline",
-                        media_type=AUDIO_MEDIA_TYPES.get(path.suffix.lower()))
+    return RedirectResponse(storage.presigned_url(
+        key, filename=filename, content_type=AUDIO_MEDIA_TYPES.get(suffix)))
 
 
 def _export_response(body: str, media_type: str, stem: str, ext: str, inline: bool):
@@ -157,7 +155,8 @@ def export_file(file_id: int, request: Request, format: str = "html", lang: str 
     stem = re.sub(r"[^A-Za-z0-9._-]+", "_", (row.get("title") or Path(row["filename"]).stem))[:60]
     if format == "md":
         return _export_response(export.render_markdown(row), "text/markdown", stem, "md", False)
-    thumb = thumbnail.get_or_create(row["sha256"], row["source_path"], row["created_at"])
+    thumb_key = thumbnail.get_or_create(row["sha256"], row["source_path"], row["created_at"])
+    thumb = storage.download_bytes(thumb_key) if thumb_key else None
     # pdf: served inline with an auto-print script so the browser saves as PDF
     html_doc = export.render(row, thumb, print_dialog=(format == "pdf"))
     return _export_response(html_doc, "text/html", stem, "html", inline=(format == "pdf"))
@@ -183,35 +182,34 @@ def upload(file: UploadFile, request: Request):
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in config.AUDIO_EXTENSIONS:
         raise HTTPException(400, f"unsupported file type: {suffix or '(none)'}")
-    # Never overwrite an existing file: a same-named upload with different
-    # content would corrupt the older recording's source.
     base = Path(file.filename).name
-    dest = config.INPUT_DIR / base
-    counter = 1
-    while dest.exists():
-        dest = config.INPUT_DIR / f"{Path(base).stem}-{counter}{Path(base).suffix}"
-        counter += 1
-    with open(dest, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    data = file.file.read()
     # An empty upload would be accepted as a new recording (the hash of "" is
     # unique), then fail to play with a 416 and fail to transcribe.
-    if dest.stat().st_size == 0:
-        dest.unlink()
+    if len(data) == 0:
         raise HTTPException(400, "uploaded file is empty")
+    digest = hashlib.sha256(data).hexdigest()
     # Register the row now so it belongs to the uploader; the folder scanner
     # would otherwise pick it up later and assign it to the admin.
-    digest = pipeline._sha256(dest)
-    file_id = db.add_file(digest, dest.name, paths.to_db(dest),
-                          user_id=request.state.user["id"])
+    existing = db.get_file_by_hash(digest)
+    if existing is not None:
+        # Same content is already in the library — say so rather than silently
+        # dropping the upload, since a 200 here would look like success.
+        where = "in the trash" if existing["deleted_at"] else "in your library"
+        raise HTTPException(409, f"already {where}: {existing['filename']}")
+    # Never reuse an existing key: a same-named upload with different content
+    # would otherwise overwrite the older recording's source.
+    key = storage.unique_key("input", base)
+    storage.upload_bytes(key, data)
+    file_id = db.add_file(digest, base, key, user_id=request.state.user["id"])
     if file_id is None:
-        # Same content is already in the library. Drop the redundant copy and say
-        # so — returning 200 here looks like success but nothing would appear.
-        dest.unlink()
+        # Lost a race with a concurrent identical upload — drop our copy.
+        storage.delete(key)
         existing = db.get_file_by_hash(digest)
         where = "in the trash" if existing and existing["deleted_at"] else "in your library"
         raise HTTPException(
             409, f"already {where}: {existing['filename'] if existing else base}")
-    return {"saved": str(dest), "id": file_id}
+    return {"saved": key, "id": file_id}
 
 
 class MemExcludeBody(BaseModel):
@@ -435,7 +433,7 @@ def set_model(body: ModelBody):
 def get_config():
     return {
         "input_dir": str(config.INPUT_DIR),
-        "output_dir": str(config.OUTPUT_DIR),
+        "storage_bucket": config.MINIO_BUCKET,
         "whisper_model": config.WHISPER_MODEL,
         "ollama_model": db.get_setting("ollama_model", config.LLM_MODEL),
     }
