@@ -29,7 +29,7 @@ EXTRA_INPUT_DIRS = [Path(p.strip()) for p in
 # are mirrored here — point it at a Drive-synced folder to publish digests.
 PUBLISH_DIR = Path(os.getenv("AUDIOLOG_PUBLISH_DIR")) if os.getenv("AUDIOLOG_PUBLISH_DIR") else None
 
-DB_PATH = Path(os.getenv("AUDIOLOG_DB", DATA_DIR / "audiolog.db"))
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://dadirri@localhost/audiolog")
 
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo")
 # Whisper transcription runs as a separate service (see whisper_service/), same

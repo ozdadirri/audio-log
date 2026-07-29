@@ -185,14 +185,37 @@ Values can also be set in a git-ignored `.env` file in the project root.
 | `AUDIOLOG_EXTRA_INPUT_DIRS` | *(empty)* | comma-separated additional watched folders |
 | `AUDIOLOG_PUBLISH_DIR` | *(empty)* | mirror each job's outputs here |
 | `AUDIOLOG_SCAN_INTERVAL` | `3` | seconds between input dir scans |
-| `AUDIOLOG_DATA_DIR` | `./data` | base dir for db, caches, default input/output |
+| `AUDIOLOG_DATA_DIR` | `./data` | base dir for caches, default input/output |
+| `DATABASE_URL` | `postgresql://<user>@localhost/audiolog` | Postgres connection string (see Database below); works with a Tailscale hostname too |
+
+## Database
+
+Recordings, transcripts, summaries, tags, users, memory, translations, and
+embedding vectors live in **Postgres**, not a local file. First-time setup:
+
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+
+createdb audiolog
+psql audiolog -f postgres/schema.sql
+```
+
+Point the app at it with `DATABASE_URL` (see Configuration below) — defaults to
+`postgresql://<your-user>@localhost/audiolog`. To run Postgres on a different
+Mac and connect to it remotely (e.g. over Tailscale), set `listen_addresses = '*'`
+in `postgresql.conf`, add a `pg_hba.conf` rule for your tailnet's CIDR
+(`100.64.0.0/10`) with `scram-sha-256`, set a password on the role
+(`ALTER ROLE <user> WITH PASSWORD '...'`), then restart Postgres and use the
+Tailscale hostname in `DATABASE_URL`.
+
+Full-text search runs against a generated `tsvector` column + GIN index on
+`files` (see `postgres/schema.sql`) rather than SQLite FTS5.
 
 ## Data layout
 
 ```
 data/
-  audiolog.db      # SQLite: recordings, transcripts, summaries, tags, users,
-                   #   memory, translations, embedding vectors, FTS5 index
   input/           # watched folder (source audio stays here)
   output/          # <name>-<hash>/ transcript.md, summary.md, meta.json
   thumbs/          # cached spectrogram PNGs (by content hash + date hue)
