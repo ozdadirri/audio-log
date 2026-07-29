@@ -61,14 +61,28 @@ it from the browser, an installable phone app, or the native iOS app.
 
 ## Run
 
+Transcription runs as its own local service (`whisper_service/`), same idea as
+Ollama — the main app talks to it over HTTP instead of loading mlx-whisper
+in-process. Both share the same venv. Start the whisper service first, then the
+main app:
+
 ```bash
-# first time: create the venv and install dependencies
+# first time: create the venv and install dependencies (shared by both services)
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
+# --- whisper service (transcription) — run from inside whisper_service/, its own terminal/tab ---
+cd whisper_service
+../.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8301
+cd ..
+
+# --- main app ---
 # start the service (0.0.0.0 so iPhone/iPad on the same WiFi can connect)
 .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8300 --reload
 ```
+
+To stop either one, `Ctrl+C` in its terminal (or `pkill -f "uvicorn main:app"` /
+`pkill -f "uvicorn app.main:app"`).
 
 Open http://localhost:8300. Files dropped into `data/input/` (or uploaded /
 recorded / drag-and-dropped) are processed automatically; results are stored in
@@ -76,7 +90,11 @@ SQLite and written to `data/output/<name>-<hash>/` as `transcript.md`,
 `summary.md`, `meta.json`.
 
 The first transcription downloads the Whisper model (~1.6 GB) from Hugging Face
-into `~/.cache/huggingface/`.
+into `~/.cache/huggingface/`. Check the whisper service is up with
+`curl http://localhost:8301/health`; if the main app can't reach it, transcription
+jobs will fail and the error will show up in the main app's logs. Point the main
+app at a different host/port — even a different Mac over Tailscale — with
+`WHISPER_URL` (see Configuration below).
 
 ## Native iOS app
 
@@ -157,7 +175,9 @@ Values can also be set in a git-ignored `.env` file in the project root.
 |---|---|---|
 | `AUDIOLOG_INPUT_DIR` | `data/input` | watched folder |
 | `AUDIOLOG_OUTPUT_DIR` | `data/output` | where results are written |
-| `AUDIOLOG_WHISPER_MODEL` | `mlx-community/whisper-large-v3-turbo` | HF repo of the mlx whisper model |
+| `WHISPER_MODEL` | `mlx-community/whisper-large-v3-turbo` | HF repo of the mlx whisper model, read by both the main app and the whisper service |
+| `WHISPER_URL` | `http://localhost:8301` | whisper service URL (see Run); works with a Tailscale hostname too |
+| `WHISPER_API_KEY` | *(empty = auth off)* | sent as `X-API-Key` to the whisper service; set the same value in both places if the whisper service isn't on localhost |
 | `AUDIOLOG_OLLAMA_MODEL` | `qwen3.6:27b` | Ollama model (also selectable at runtime in the UI) |
 | `AUDIOLOG_EMBED_MODEL` | `nomic-embed-text` | Ollama embedding model for semantic search |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama server |
