@@ -46,8 +46,17 @@ struct APIClient {
                  + keySuffix(joiner: "&"))
     }
 
-    static func audioURL(id: Int) -> URL? {
-        try? url("/api/files/\(id)/audio?v=3" + keySuffix(joiner: "&"))
+    // Mirrors app/transcode.py's BROWSER_SAFE set: anything outside it is
+    // transcoded server-side to .m4a. AVPlayer sniffs format from the URL's path
+    // extension rather than Content-Type, so the URL needs a real one to match.
+    private static let browserSafeExtensions: Set<String> = [
+        "mp3", "m4a", "mp4", "wav", "flac", "ogg", "opus", "aac",
+    ]
+
+    static func audioURL(id: Int, filename: String) -> URL? {
+        let sourceExt = (filename as NSString).pathExtension.lowercased()
+        let ext = browserSafeExtensions.contains(sourceExt) ? sourceExt : "m4a"
+        return try? url("/api/files/\(id)/audio.\(ext)?v=3" + keySuffix(joiner: "&"))
     }
 
     private static func get<T: Decodable>(_ path: String) async throws -> T {

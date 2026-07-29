@@ -197,7 +197,7 @@ struct DetailView: View {
             let d = try await APIClient.detail(id: fileID)
             detail = d
             segments = TranscriptSegment.parse(d.transcript ?? "")
-            if let url = APIClient.audioURL(id: fileID) {
+            if let url = APIClient.audioURL(id: fileID, filename: d.filename) {
                 player.load(url: url, fallbackDuration: d.duration)
             }
             if let langs = try? await APIClient.languages() { languages = langs }
